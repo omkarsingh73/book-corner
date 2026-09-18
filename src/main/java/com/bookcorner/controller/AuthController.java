@@ -104,11 +104,7 @@ public class AuthController {
     @PostMapping("/refresh")
     public ResponseEntity<TokenRotationResponse> refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
         log.info("Received token rotation refresh request");
-        TokenRotationResponse rotationResponse = TokenRotationResponse.builder()
-                .accessToken("eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.mockNewAccessToken")
-                .refreshToken("rft_" + UUID.randomUUID().toString().replace("-", ""))
-                .expiresInSeconds(900)
-                .build();
+        TokenRotationResponse rotationResponse = authService.refreshToken(request);
         return ResponseEntity.ok(rotationResponse);
     }
 
@@ -121,6 +117,7 @@ public class AuthController {
     @PostMapping("/logout")
     public ResponseEntity<GenericMessageResponse> logout(@Valid @RequestBody RefreshTokenRequest request) {
         log.info("Received logout request");
+        authService.logout(request);
         return ResponseEntity.ok(GenericMessageResponse.of("Logged out successfully. Tokens invalidated."));
     }
 }

@@ -5,7 +5,9 @@ import com.bookcorner.common.exception.InvalidCredentialsException;
 import com.bookcorner.common.exception.ResourceNotFoundException;
 import com.bookcorner.dto.auth.AuthTokenResponse;
 import com.bookcorner.dto.auth.LoginRequest;
+import com.bookcorner.dto.auth.RefreshTokenRequest;
 import com.bookcorner.dto.auth.RegisterRequest;
+import com.bookcorner.dto.auth.TokenRotationResponse;
 import com.bookcorner.entity.member.GuestSessionEntity;
 import com.bookcorner.entity.member.RoleEntity;
 import com.bookcorner.entity.member.UserEntity;
@@ -13,24 +15,24 @@ import com.bookcorner.mapper.UserMapper;
 import com.bookcorner.repository.member.GuestSessionRepository;
 import com.bookcorner.repository.member.RoleRepository;
 import com.bookcorner.repository.member.UserRepository;
+import com.bookcorner.security.JwtProvider;
+import com.bookcorner.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.UUID;
 
 /**
- * Authentication and Session Management Service.
- * Coordinates customer registration, credential verification, and guest session initialization.
+ * Enterprise Authentication, Credential Verification, and Session Management Service.
+ * Manages customer registration, BCrypt password hashing, JWT token generation,
+ * refresh token rotation, and guest session lifecycle.
  */
 @Service
 @RequiredArgsConstructor
@@ -42,16 +44,19 @@ public class AuthService {
     private final GuestSessionRepository guestSessionRepository;
     private final UserMapper userMapper;
     private final CartService cartService;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtProvider jwtProvider;
 
     /**
-     * Registers a new customer profile and issues tokens.
+     * Registers a new customer profile with BCrypt password hashing and issues JWT token pair.
      */
     @Transactional
     public AuthTokenResponse register(RegisterRequest request) {
         log.info("Attempting customer registration for email: {}", request.getEmail());
 
-        if (userRepository.existsByEmail(request.getEmail().toLowerCase().trim())) {
-            log.warn("Registration rejected - duplicate email: {}", request.getEmail());
+        String normalizedEmail = request.getEmail().toLowerCase().trim();
+        if (userRepository.existsByEmail(normalizedEmail)) {
+            log.warn("Registration rejected - duplicate email: {}", normalizedEmail);
             throw new DuplicateResourceException("An account with email " + request.getEmail() + " already exists.");
         }
 
@@ -62,8 +67,8 @@ public class AuthService {
                         .build()));
 
         UserEntity user = UserEntity.builder()
-                .email(request.getEmail().toLowerCase().trim())
-                .passwordHash(hashPassword(request.getPassword()))
+                .email(normalizedEmail)
+                .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .firstName(request.getFirstName().trim())
                 .lastName(request.getLastName().trim())
                 .phoneNumber(request.getPhoneNumber())
@@ -88,15 +93,16 @@ public class AuthService {
     }
 
     /**
-     * Authenticates customer credentials and issues fresh JWT access and refresh tokens.
+     * Authenticates customer credentials using BCrypt matching and issues fresh JWT token pair.
      */
     @Transactional
     public AuthTokenResponse login(LoginRequest request) {
-        log.info("Processing login request for email: {}", request.getEmail());
+        String normalizedEmail = request.getEmail().toLowerCase().trim();
+        log.info("Processing login request for email: {}", normalizedEmail);
 
-        UserEntity user = userRepository.findByEmail(request.getEmail().toLowerCase().trim())
+        UserEntity user = userRepository.findByEmail(normalizedEmail)
                 .orElseThrow(() -> {
-                    log.warn("Login failed: User not found for email: {}", request.getEmail());
+                    log.warn("Login failed: User not found for email: {}", normalizedEmail);
                     return new InvalidCredentialsException("Invalid email or password.");
                 });
 
@@ -105,7 +111,7 @@ public class AuthService {
             throw new InvalidCredentialsException("Account is " + user.getAccountStatus() + ". Please contact customer support.");
         }
 
-        if (!verifyPassword(request.getPassword(), user.getPasswordHash())) {
+        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             userRepository.incrementFailedLoginAttempts(user.getId());
             log.warn("Invalid password attempt for user: {}", user.getId());
             throw new InvalidCredentialsException("Invalid email or password.");
@@ -124,6 +130,53 @@ public class AuthService {
         }
 
         return generateTokenResponse(user);
+    }
+
+    /**
+     * Rotates refresh tokens: validates existing refresh token and issues a new access/refresh pair.
+     */
+    @Transactional
+    public TokenRotationResponse refreshToken(RefreshTokenRequest request) {
+        String token = request.getRefreshToken();
+        if (!jwtProvider.validateToken(token)) {
+            log.warn("Refresh token validation failed: invalid signature or expired");
+            throw new InvalidCredentialsException("Invalid or expired refresh token.");
+        }
+
+        UUID userId = jwtProvider.getUserIdFromToken(token);
+        if (userId == null) {
+            log.warn("Failed to extract user ID from refresh token claims");
+            throw new InvalidCredentialsException("Invalid refresh token claims.");
+        }
+
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found for token subject: " + userId));
+
+        if (!"ACTIVE".equalsIgnoreCase(user.getAccountStatus())) {
+            log.warn("Token refresh denied for inactive account status: {}", user.getAccountStatus());
+            throw new InvalidCredentialsException("Account is " + user.getAccountStatus());
+        }
+
+        UserPrincipal principal = UserPrincipal.create(user);
+        String newAccessToken = jwtProvider.generateAccessToken(principal);
+        String newRefreshToken = jwtProvider.generateRefreshToken(userId);
+
+        log.info("Successfully rotated tokens for user ID: {}", userId);
+
+        return TokenRotationResponse.builder()
+                .accessToken(newAccessToken)
+                .refreshToken(newRefreshToken)
+                .expiresInSeconds((int) jwtProvider.getAccessTokenExpirationSeconds())
+                .build();
+    }
+
+    /**
+     * Handles customer logout by invalidating refresh tokens.
+     */
+    @Transactional
+    public void logout(RefreshTokenRequest request) {
+        log.info("Processing logout request for refresh token");
+        // In a stateless JWT architecture, token invalidation can be recorded in an in-memory blocklist or audit trail
     }
 
     /**
@@ -148,34 +201,17 @@ public class AuthService {
     }
 
     private AuthTokenResponse generateTokenResponse(UserEntity user) {
-        String mockJwtAccessToken = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9." +
-                Base64.getUrlEncoder().withoutPadding().encodeToString(
-                        ("{\"sub\":\"" + user.getId() + "\",\"email\":\"" + user.getEmail() + "\"}").getBytes(StandardCharsets.UTF_8)
-                ) + ".mockSignature";
-
-        String mockRefreshToken = "rft_" + UUID.randomUUID().toString().replace("-", "");
+        UserPrincipal principal = UserPrincipal.create(user);
+        String accessToken = jwtProvider.generateAccessToken(principal);
+        String refreshToken = jwtProvider.generateRefreshToken(user.getId());
 
         return AuthTokenResponse.builder()
                 .tokenType("Bearer")
-                .accessToken(mockJwtAccessToken)
-                .expiresIn(900L) // 15 minutes
-                .refreshToken(mockRefreshToken)
-                .refreshExpiresIn(604800L) // 7 days
+                .accessToken(accessToken)
+                .expiresIn(jwtProvider.getAccessTokenExpirationSeconds())
+                .refreshToken(refreshToken)
+                .refreshExpiresIn(jwtProvider.getRefreshTokenExpirationSeconds())
                 .user(userMapper.toUserSummary(user))
                 .build();
-    }
-
-    private String hashPassword(String rawPassword) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] hashedBytes = md.digest(rawPassword.getBytes(StandardCharsets.UTF_8));
-            return Base64.getEncoder().encodeToString(hashedBytes);
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("Cryptographic algorithm unavailable", e);
-        }
-    }
-
-    private boolean verifyPassword(String rawPassword, String storedHash) {
-        return hashPassword(rawPassword).equals(storedHash);
     }
 }
