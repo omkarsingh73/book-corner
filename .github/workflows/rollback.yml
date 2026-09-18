@@ -1,0 +1,128 @@
+name: Manual Emergency Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: 'Target Environment to rollback'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+      rollback_image_tag:
+        description: 'Target ECR Image Tag to revert to (e.g., sha-abc1234 or v1.0.0)'
+        required: true
+        type: string
+      reason:
+        description: 'Incident or Rollback Rationale'
+        required: true
+        default: 'P1 incident remediation'
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  APP_NAME: book-corner
+
+jobs:
+  execute-rollback:
+    name: Execute Rollback (${{ inputs.target_environment }})
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.target_environment }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: >-
+            ${{ inputs.target_environment == 'production' && secrets.AWS_PRODUCTION_DEPLOY_ROLE_ARN || secrets.AWS_STAGING_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Determine Service ARN & ECR Registry
+        id: config
+        run: |
+          if [ "${{ inputs.target_environment }}" = "production" ]; then
+            SERVICE_ARN="${{ secrets.APP_RUNNER_PROD_SERVICE_ARN }}"
+            ENV_TAG="prod"
+          else
+            SERVICE_ARN="${{ secrets.APP_RUNNER_STAGING_SERVICE_ARN }}"
+            ENV_TAG="staging"
+          fi
+          
+          ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+          ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
+          TARGET_IMAGE="${ECR_REGISTRY}/${{ env.APP_NAME }}-${ENV_TAG}-api:${{ inputs.rollback_image_tag }}"
+          
+          echo "service_arn=${SERVICE_ARN}" >> "$GITHUB_OUTPUT"
+          echo "target_image=${TARGET_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "Target Rollback Image: ${TARGET_IMAGE}"
+
+      - name: Verify Image Exists in ECR
+        run: |
+          REPOSITORY="${{ env.APP_NAME }}-${{ inputs.target_environment == 'production' && 'prod' || 'staging' }}-api"
+          echo "Verifying image tag ${{ inputs.rollback_image_tag }} in ${REPOSITORY}..."
+          aws ecr describe-images \
+            --repository-name "${REPOSITORY}" \
+            --image-ids imageTag="${{ inputs.rollback_image_tag }}"
+
+      - name: Update App Runner Service Image
+        run: |
+          SERVICE_ARN="${{ steps.config.outputs.service_arn }}"
+          TARGET_IMAGE="${{ steps.config.outputs.target_image }}"
+          
+          echo "Updating App Runner Service: ${SERVICE_ARN} to ${TARGET_IMAGE}"
+          aws apprunner update-service \
+            --service-arn "${SERVICE_ARN}" \
+            --source-configuration "ImageRepository={ImageIdentifier=${TARGET_IMAGE},ImageRepositoryType=ECR}"
+
+      - name: Trigger App Runner Deployment
+        id: deploy
+        run: |
+          SERVICE_ARN="${{ steps.config.outputs.service_arn }}"
+          OP_ID=$(aws apprunner start-deployment --service-arn "${SERVICE_ARN}" --query "OperationId" --output text)
+          echo "operation_id=${OP_ID}" >> "$GITHUB_OUTPUT"
+          echo "Rollback Deployment Initiated: ${OP_ID}"
+
+      - name: Wait for Rollback Completion
+        run: |
+          SERVICE_ARN="${{ steps.config.outputs.service_arn }}"
+          for i in {1..50}; do
+            STATUS=$(aws apprunner describe-service --service-arn "${SERVICE_ARN}" --query "Service.Status" --output text)
+            echo "Attempt $i: Status = ${STATUS}"
+            if [ "${STATUS}" = "RUNNING" ]; then
+              echo "Rollback deployment successfully reached RUNNING state!"
+              exit 0
+            elif [ "${STATUS}" = "OPERATION_IN_PROGRESS" ]; then
+              sleep 15
+            else
+              echo "Rollback operation ended in failure: ${STATUS}"
+              exit 1
+            fi
+          done
+          echo "Rollback operation timed out."
+          exit 1
+
+      - name: Post-Rollback Health Verification
+        run: |
+          SERVICE_URL="https://$(aws apprunner describe-service --service-arn "${{ steps.config.outputs.service_arn }}" --query "Service.ServiceUrl" --output text)"
+          TARGET_URL="${SERVICE_URL}/actuator/health/readiness"
+          echo "Checking Service Health at: ${TARGET_URL}"
+          
+          for i in {1..10}; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${TARGET_URL}" || echo "000")
+            if [ "${HTTP_CODE}" -eq 200 ]; then
+              echo "Rollback verified! Service healthy with HTTP 200 OK."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Service health check failed after rollback!"
+          exit 1
