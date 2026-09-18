@@ -56,7 +56,7 @@ public interface UserMapper {
     @Mapping(target = "addressType", ignore = true)
     @Mapping(target = "countryCode", ignore = true)
     @Mapping(target = "version", ignore = true)
-    @Mapping(target = "isDeleted", ignore = true)
+    @Mapping(target = "deleted", ignore = true)
     void updateAddressFromRequest(UpdateAddressRequest request, @MappingTarget UserAddressEntity entity);
 
     @Named("mapRolesToStrings")

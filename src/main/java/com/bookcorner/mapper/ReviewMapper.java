@@ -26,8 +26,8 @@ public interface ReviewMapper {
     @Mapping(target = "bookId", source = "book.id")
     @Mapping(target = "authorName", source = "user", qualifiedByName = "formatReviewerName")
     @Mapping(target = "rating", source = "ratingStars")
-    @Mapping(target = "title", source = "reviewTitle")
-    @Mapping(target = "body", source = "reviewBody")
+    @Mapping(target = "reviewTitle", source = "reviewTitle")
+    @Mapping(target = "reviewBody", source = "reviewBody")
     @Mapping(target = "helpfulVotes", source = "helpfulVotesCount")
     ReviewDto toReviewDto(ReviewEntity entity);
 
