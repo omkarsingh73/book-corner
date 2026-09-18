@@ -38,7 +38,7 @@ import java.util.List;
 public class CategoryEntity extends BaseAuditEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "parent_id")
+    @JoinColumn(name = "parent_category_id")
     private CategoryEntity parent;
 
     @Column(name = "category_name", nullable = false, length = 100)
@@ -47,7 +47,7 @@ public class CategoryEntity extends BaseAuditEntity {
     @Column(name = "category_slug", nullable = false, length = 100, unique = true)
     private String categorySlug;
 
-    @Column(name = "category_level", nullable = false)
+    @Column(name = "tree_level", nullable = false)
     @Builder.Default
     private int categoryLevel = 1;
 

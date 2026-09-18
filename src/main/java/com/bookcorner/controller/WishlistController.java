@@ -99,6 +99,9 @@ public class WishlistController {
         if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
             throw new UnauthorizedOperationException("Authentication required to access customer wishlist.");
         }
+        if (authentication.getPrincipal() instanceof com.bookcorner.security.UserPrincipal principal) {
+            return principal.getId();
+        }
         try {
             return UUID.fromString(authentication.getName());
         } catch (IllegalArgumentException e) {

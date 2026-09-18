@@ -39,7 +39,7 @@ public class BookAuthorEntity extends BaseAuditEntity {
     @JoinColumn(name = "author_id", nullable = false)
     private AuthorEntity author;
 
-    @Column(name = "author_order", nullable = false)
+    @Column(name = "author_sequence", nullable = false)
     @Builder.Default
     private int authorOrder = 1;
 

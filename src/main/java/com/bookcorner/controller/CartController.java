@@ -183,17 +183,20 @@ public class CartController {
         if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
             return null;
         }
+        if (authentication.getPrincipal() instanceof com.bookcorner.security.UserPrincipal principal) {
+            return principal.isGuest() ? null : principal.getId();
+        }
         try {
             return UUID.fromString(authentication.getName());
         } catch (IllegalArgumentException e) {
-            return UUID.fromString("11111111-1111-1111-1111-111111111111");
+            return null;
         }
     }
 
     private UUID resolveRequiredUserId(Authentication authentication) {
         UUID id = resolveOptionalUserId(authentication);
         if (id == null) {
-            return UUID.fromString("11111111-1111-1111-1111-111111111111");
+            throw new com.bookcorner.common.exception.UnauthorizedOperationException("Authentication required to access cart.");
         }
         return id;
     }

@@ -28,9 +28,9 @@ public interface OrderRepository extends JpaRepository<OrderEntity, UUID>, JpaSp
     Optional<OrderEntity> findByOrderNumber(String orderNumber);
 
     /**
-     * Find order with complete line items, status history, and payment transactions eagerly fetched.
+     * Find order with complete line items and coupon eagerly fetched.
      */
-    @EntityGraph(attributePaths = {"lineItems.format.book", "statusHistory", "paymentTransactions", "coupon"})
+    @EntityGraph(attributePaths = {"lineItems.format.book", "coupon"})
     @Query("SELECT o FROM OrderEntity o WHERE o.orderNumber = :orderNumber")
     Optional<OrderEntity> findByOrderNumberWithDetails(@Param("orderNumber") String orderNumber);
 

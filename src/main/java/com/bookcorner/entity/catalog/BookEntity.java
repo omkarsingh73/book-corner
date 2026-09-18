@@ -57,7 +57,7 @@ public class BookEntity extends BaseAuditEntity {
     @Column(name = "publication_date", nullable = false)
     private LocalDate publicationDate;
 
-    @Column(name = "primary_language", nullable = false, length = 32)
+    @Column(name = "language", nullable = false, length = 32)
     @Builder.Default
     private String primaryLanguage = "English";
 
@@ -72,10 +72,12 @@ public class BookEntity extends BaseAuditEntity {
     private CategoryEntity primaryCategory;
 
     @OneToMany(mappedBy = "book", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @org.hibernate.annotations.BatchSize(size = 50)
     @Builder.Default
     private List<BookAuthorEntity> bookAuthors = new ArrayList<>();
 
     @OneToMany(mappedBy = "book", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @org.hibernate.annotations.BatchSize(size = 50)
     @Builder.Default
     private List<BookFormatEntity> formats = new ArrayList<>();
 

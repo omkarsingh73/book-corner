@@ -27,7 +27,7 @@ public interface BookRepository extends JpaRepository<BookEntity, UUID>, JpaSpec
      * and eliminate N+1 queries during catalog browsing and mapping.
      */
     @Override
-    @EntityGraph(attributePaths = {"publisher", "primaryCategory", "formats", "bookAuthors.author"})
+    @EntityGraph(attributePaths = {"publisher", "primaryCategory"})
     Page<BookEntity> findAll(Specification<BookEntity> spec, Pageable pageable);
 
     /**
@@ -37,9 +37,9 @@ public interface BookRepository extends JpaRepository<BookEntity, UUID>, JpaSpec
     Optional<BookEntity> findByIsbn13(String isbn13);
 
     /**
-     * Find book by ID with eager fetch of publisher, primary category, formats, and authors.
+     * Find book by ID with eager fetch of publisher and primary category.
      */
-    @EntityGraph(attributePaths = {"publisher", "primaryCategory", "formats", "bookAuthors.author"})
+    @EntityGraph(attributePaths = {"publisher", "primaryCategory"})
     @Query("SELECT b FROM BookEntity b WHERE b.id = :id")
     Optional<BookEntity> findByIdWithDetails(@Param("id") UUID id);
 

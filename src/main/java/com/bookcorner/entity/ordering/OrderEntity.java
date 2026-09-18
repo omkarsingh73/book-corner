@@ -104,15 +104,18 @@ public class OrderEntity extends BaseAuditEntity {
     private String cancellationReason;
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @org.hibernate.annotations.BatchSize(size = 50)
     @Builder.Default
     private List<OrderLineItemEntity> lineItems = new ArrayList<>();
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @org.hibernate.annotations.BatchSize(size = 50)
     @OrderBy("createdAt ASC")
     @Builder.Default
     private List<OrderStatusHistoryEntity> statusHistory = new ArrayList<>();
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @org.hibernate.annotations.BatchSize(size = 50)
     @Builder.Default
     private List<PaymentTransactionEntity> paymentTransactions = new ArrayList<>();
 

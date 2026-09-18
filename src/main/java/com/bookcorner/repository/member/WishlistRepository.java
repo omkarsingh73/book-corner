@@ -15,9 +15,9 @@ import java.util.UUID;
 public interface WishlistRepository extends JpaRepository<WishlistEntity, UUID> {
 
     /**
-     * Find customer wishlist by user ID with eager loading of book formats and authors.
+     * Find customer wishlist by user ID with eager loading of book items.
      */
-    @EntityGraph(attributePaths = {"items.book.formats", "items.book.bookAuthors.author"})
+    @EntityGraph(attributePaths = {"items.book"})
     Optional<WishlistEntity> findByUserId(UUID userId);
 
     /**

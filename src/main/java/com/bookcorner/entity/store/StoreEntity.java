@@ -37,7 +37,7 @@ public class StoreEntity extends BaseAuditEntity {
     @Column(name = "store_name", nullable = false, length = 150)
     private String storeName;
 
-    @Column(name = "default_currency", nullable = false, length = 3)
+    @Column(name = "currency_code", nullable = false, length = 3)
     @Builder.Default
     private String defaultCurrency = "USD";
 
