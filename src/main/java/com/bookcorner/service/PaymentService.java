@@ -240,9 +240,9 @@ public class PaymentService {
 
         RefundRecordEntity refund = RefundRecordEntity.builder()
                 .paymentTransaction(primaryTx)
+                .order(primaryTx.getOrder())
                 .refundAmount(refundAmountCents)
-                .currencyCode(primaryTx.getCurrencyCode())
-                .reason(reason)
+                .refundReason(reason)
                 .refundStatus("COMPLETED")
                 .gatewayRefundId("re_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20))
                 .processedAt(Instant.now())
