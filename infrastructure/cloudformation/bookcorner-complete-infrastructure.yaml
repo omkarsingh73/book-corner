@@ -502,6 +502,66 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
+  RDSProxyIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-${Environment}-rds-proxy-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: rds.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: SecretsManagerAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref DatabaseSecret
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !GetAtt KmsKey.Arn
+
+  RDSProxy:
+    Type: AWS::RDS::DBProxy
+    Properties:
+      DBProxyName: !Sub "${AppName}-${Environment}-rds-proxy"
+      EngineFamily: POSTGRESQL
+      Auth:
+        - AuthScheme: SECRETS
+          SecretArn: !Ref DatabaseSecret
+          IAMAuth: DISABLED
+      RoleArn: !GetAtt RDSProxyIAMRole.Arn
+      VpcSubnetIds: !Ref DbSubnetIds
+      VpcSecurityGroupIds:
+        - !Ref RDSSecurityGroup
+      RequireTLS: true
+      IdleClientTimeout: 1800
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-rds-proxy"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  RDSProxyTargetGroup:
+    Type: AWS::RDS::DBProxyTargetGroup
+    Properties:
+      DBProxyName: !Ref RDSProxy
+      TargetGroupName: default
+      DBInstanceIdentifiers:
+        - !Ref RDSInstance
+      ConnectionPoolConfigurationInfo:
+        MaxConnectionsPercent: 90
+        MaxIdleConnectionsPercent: 50
+        ConnectionBorrowTimeout: 120
+
   # ===========================================================================
   # 6. AWS APP RUNNER SERVICE (MANAGED CONTAINER RUNTIME)
   # ===========================================================================
@@ -585,7 +645,7 @@ Resources:
               - Name: SERVER_PORT
                 Value: "8080"
               - Name: SPRING_DATASOURCE_URL
-                Value: !Sub "jdbc:postgresql://${RDSInstance.Endpoint.Address}:${RDSInstance.Endpoint.Port}/bookcorner?sslmode=verify-full"
+                Value: !Sub "jdbc:postgresql://${RDSProxy.Endpoint}:5432/bookcorner?sslmode=require"
             RuntimeEnvironmentSecrets:
               - Name: SPRING_DATASOURCE_USERNAME
                 Value: !Sub "${DatabaseSecret.Arn}:username::"

@@ -36,7 +36,7 @@ public class JwtProvider {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @Value("${jwt.secret:bookcorner_jwt_super_secret_signing_key_2026_enterprise_grade_security_must_be_256_bits}")
+    @Value("${jwt.secret}")
     private String jwtSecret;
 
     @Value("${jwt.access-token-expiration-seconds:900}") // 15 minutes

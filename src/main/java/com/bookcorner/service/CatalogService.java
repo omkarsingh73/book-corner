@@ -16,6 +16,7 @@ import com.bookcorner.repository.catalog.CategoryRepository;
 import com.bookcorner.repository.review.ReviewRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -69,6 +70,7 @@ public class CatalogService {
      * Retrieves detailed book specification, editorial metadata, formats, and rating summary.
      */
     @Transactional(readOnly = true)
+    @Cacheable(value = "books", key = "#bookId")
     public BookDetailResponse getBookDetails(UUID bookId) {
         log.info("Fetching complete book details for ID: {}", bookId);
 
@@ -121,6 +123,7 @@ public class CatalogService {
      * Retrieves top-level category tree with subcategories eagerly populated.
      */
     @Transactional(readOnly = true)
+    @Cacheable(value = "categories")
     public List<CategoryNodeDto> listCategories() {
         log.info("Fetching complete category hierarchical tree");
         List<CategoryEntity> rootCategories = categoryRepository.findAllRootCategoriesWithSubcategories();

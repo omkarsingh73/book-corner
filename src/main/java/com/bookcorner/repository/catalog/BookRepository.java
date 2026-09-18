@@ -3,6 +3,7 @@ package com.bookcorner.repository.catalog;
 import com.bookcorner.entity.catalog.BookEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -20,6 +21,14 @@ import java.util.UUID;
  */
 @Repository
 public interface BookRepository extends JpaRepository<BookEntity, UUID>, JpaSpecificationExecutor<BookEntity> {
+
+    /**
+     * Override default findAll with EntityGraph to eagerly fetch associations
+     * and eliminate N+1 queries during catalog browsing and mapping.
+     */
+    @Override
+    @EntityGraph(attributePaths = {"publisher", "primaryCategory", "formats", "bookAuthors.author"})
+    Page<BookEntity> findAll(Specification<BookEntity> spec, Pageable pageable);
 
     /**
      * Find book by unique ISBN-13 with eagerly fetched publisher and primary category.

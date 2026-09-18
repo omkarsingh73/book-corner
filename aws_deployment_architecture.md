@@ -226,14 +226,16 @@ The cost model is evaluated based on standard AWS commercial pricing in **US Eas
 | :--- | :--- | :--- | :--- |
 | **AWS App Runner** | **Dev:** 1 instance (1 vCPU, 2 GB RAM, 730 hrs)<br>**Prod:** Avg. 3 active instances (2 vCPU, 4 GB RAM, 24/7) + Provisioned Baseline | **$37.96**<br>*(Provisioned: $5.11 + Active vCPU: $23.36 + Memory: $9.49)* | **$204.40**<br>*(Active 2 vCPU: $140.16 + 4 GB RAM: $56.94 + Baseline: $7.30)* |
 | **Amazon RDS PostgreSQL** | **Dev:** `db.t4g.small` (2 vCPU, 2 GB), Single-AZ, 30 GB gp3<br>**Prod:** `db.m6g.large` (2 vCPU, 8 GB), Multi-AZ, 100 GB gp3, 3000 IOPS | **$28.26**<br>*(Instance: $24.82 + Storage: $3.45)* | **$261.34**<br>*(Instance: $230.68 + Multi-AZ Storage 100GB: $23.00 + Backup 100GB: $7.66)* |
+| **Amazon RDS Proxy** | **Dev:** Disabled (Direct connect)<br>**Prod:** 1 DB Proxy (2 vCPU capacity, connection multiplexing & queuing) | **$0.00** | **$21.90**<br>*(2 vCPU × $0.015/hr × 730 hrs)* |
 | **Amazon ECR** | 1 repository, 25 GB storage (Dev: 10 GB, Prod: 25 GB) + Image Scanning | **$1.00** | **$2.50** |
 | **AWS Secrets Manager** | 3 secrets (RDS credentials, JWT Secret, Third-party API keys) + 50,000 API calls/month | **$1.45**<br>*(3 secrets × $0.40 + $0.25 calls)* | **$1.45**<br>*(3 secrets × $0.40 + $0.25 calls)* |
+| **AWS NAT Gateway** | **Dev:** Disabled (Public subnets)<br>**Prod:** 1 NAT Gateway in Public Subnet for Stripe/Carrier API egress | **$0.00** | **$37.35**<br>*($0.045/hr × 730 hrs + $4.50 data)* |
 | **AWS PrivateLink Endpoints** | 3 VPC Interface Endpoints (Secrets, Logs, X-Ray) across 2 AZs | **$0.00** *(Use NAT/Direct in dev)* | **$21.90**<br>*(3 endpoints × $0.01/hr × 730 hrs)* |
 | **Amazon CloudWatch** | Logs ingestion (Prod: 15 GB/mo), metrics (10 custom metrics), 5 alarms, 1 dashboard | **$5.50** | **$15.50**<br>*(Logs: $7.50 + Alarms: $1.00 + Metrics: $3.00 + Dashboard: $3.00)* |
 | **AWS X-Ray** | 5,000,000 requests/month with 5% sampling = 250,000 traces recorded + 1,000,000 traces retrieved | **$1.25** | **$2.00**<br>*(Traces: $1.25 + Storage/Retrieval: $0.75)* |
 | **AWS KMS** | 1 Customer Managed Key (CMK) + 100,000 cryptographic operations/month | **$1.00** | **$1.03** |
 | **Data Transfer & Egress** | Inter-AZ replication + Internet outbound data transfer (Prod: 100 GB/month) | **$1.50** | **$9.00** |
-| **TOTAL ESTIMATED MONTHLY COST** | — | **$77.92 / month** | **$519.12 / month** |
+| **TOTAL ESTIMATED MONTHLY COST** | — | **$77.92 / month** | **$578.37 / month** |
 
 ---
 

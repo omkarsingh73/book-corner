@@ -219,6 +219,70 @@ Resources:
         - Key: ManagedBy
           Value: CloudFormation
 
+  # ---------------------------------------------------------------------------
+  # 5. Amazon RDS Proxy & IAM Execution Role
+  # Multiplexes connection pooling across autoscaled App Runner instances
+  # ---------------------------------------------------------------------------
+  RDSProxyIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-${Environment}-rds-proxy-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: rds.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: SecretsManagerAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref DatabaseSecretArn
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !Ref KmsKeyArn
+
+  RDSProxy:
+    Type: AWS::RDS::DBProxy
+    Properties:
+      DBProxyName: !Sub "${AppName}-${Environment}-rds-proxy"
+      EngineFamily: POSTGRESQL
+      Auth:
+        - AuthScheme: SECRETS
+          SecretArn: !Ref DatabaseSecretArn
+          IAMAuth: DISABLED
+      RoleArn: !GetAtt RDSProxyIAMRole.Arn
+      VpcSubnetIds: !Ref DbSubnetIds
+      VpcSecurityGroupIds:
+        - !Ref RDSSecurityGroup
+      RequireTLS: true
+      IdleClientTimeout: 1800
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-rds-proxy"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  RDSProxyTargetGroup:
+    Type: AWS::RDS::DBProxyTargetGroup
+    Properties:
+      DBProxyName: !Ref RDSProxy
+      TargetGroupName: default
+      DBInstanceIdentifiers:
+        - !Ref RDSInstance
+      ConnectionPoolConfigurationInfo:
+        MaxConnectionsPercent: 90
+        MaxIdleConnectionsPercent: 50
+        ConnectionBorrowTimeout: 120
+
 Outputs:
   DBInstanceIdentifier:
     Description: RDS DB Instance Identifier.
@@ -231,6 +295,12 @@ Outputs:
     Value: !GetAtt RDSInstance.Endpoint.Address
     Export:
       Name: !Sub "${AppName}-${Environment}-DBEndpointAddress"
+
+  DBProxyEndpoint:
+    Description: Amazon RDS Proxy endpoint address for pooled JDBC connection string.
+    Value: !GetAtt RDSProxy.Endpoint
+    Export:
+      Name: !Sub "${AppName}-${Environment}-DBProxyEndpoint"
 
   DBEndpointPort:
     Description: RDS PostgreSQL listening port.

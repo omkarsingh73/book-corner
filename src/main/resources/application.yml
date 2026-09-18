@@ -28,7 +28,7 @@ spring:
     baseline-on-migrate: true
 
 jwt:
-  secret: ${JWT_SECRET:bookcorner_jwt_super_secret_signing_key_2026_enterprise_grade_security_must_be_256_bits}
+  secret: ${JWT_SECRET}
   access-token-expiration-seconds: ${JWT_ACCESS_TOKEN_EXPIRATION_SECONDS:900}
   refresh-token-expiration-seconds: ${JWT_REFRESH_TOKEN_EXPIRATION_SECONDS:604800}
 
@@ -51,6 +51,41 @@ management:
       enabled: true
     readinessstate:
       enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+    propagation:
+      type: W3C,B3
+
+security:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:https://bookcorner.com,https://www.bookcorner.com,http://localhost:3000,http://localhost:8080}
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      paymentGateway:
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10000ms
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+      shippingCarrier:
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10000ms
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+  retry:
+    instances:
+      paymentGateway:
+        max-attempts: 3
+        wait-duration: 500ms
+      shippingCarrier:
+        max-attempts: 3
+        wait-duration: 500ms
 
 logging:
   level:

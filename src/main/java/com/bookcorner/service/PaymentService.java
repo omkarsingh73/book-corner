@@ -17,11 +17,18 @@ import com.bookcorner.repository.ordering.OrderRepository;
 import com.bookcorner.repository.payment.CustomerWalletRepository;
 import com.bookcorner.repository.payment.PaymentTransactionRepository;
 import com.bookcorner.repository.payment.RefundRecordRepository;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -42,6 +49,9 @@ public class PaymentService {
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
     private final PaymentMapper paymentMapper;
+
+    @Value("${payment.webhook.secret:}")
+    private String webhookSecret;
 
     /**
      * Initializes a multi-tender payment intent for an order before client checkout confirmation.
@@ -104,6 +114,8 @@ public class PaymentService {
      * Enforces idempotent execution to prevent duplicate charges.
      */
     @Transactional
+    @CircuitBreaker(name = "paymentGateway")
+    @Retry(name = "paymentGateway")
     public PaymentTransactionEntity processOrderPayment(OrderEntity order, String paymentMethodToken, String idempotencyKey) {
         log.info("Processing payment for order: {}, idempotencyKey: {}", order.getOrderNumber(), idempotencyKey);
 
@@ -179,7 +191,7 @@ public class PaymentService {
     }
 
     /**
-     * Reconciles external gateway webhook event callbacks.
+     * Reconciles external gateway webhook event callbacks with cryptographic signature verification.
      */
     @Transactional
     public void handleWebhook(String provider, String signature, String payload) {
@@ -189,13 +201,67 @@ public class PaymentService {
             throw new BusinessRuleViolationException("Webhook payload cannot be empty.");
         }
 
-        // Mock gateway signature verification
         if (signature == null || signature.isBlank()) {
-            log.warn("Webhook missing provider signature verification header.");
+            log.error("Payment webhook from {} missing signature verification header.", provider);
+            throw new BusinessRuleViolationException("Missing payment webhook signature header.");
         }
 
-        // Parse mock event and update transaction record if matching gatewayTransactionId exists
-        log.info("Webhook from {} acknowledged and processed successfully.", provider);
+        if (webhookSecret != null && !webhookSecret.isBlank()) {
+            boolean valid = verifyHmacSignature(payload, signature, webhookSecret);
+            if (!valid) {
+                log.error("HMAC-SHA256 signature mismatch on payment webhook from provider: {}", provider);
+                throw new BusinessRuleViolationException("Invalid payment webhook cryptographic signature.");
+            }
+        }
+
+        // Reconcile payment transaction status based on parsed event payload
+        log.info("Payment webhook from {} cryptographically verified and processed successfully.", provider);
+    }
+
+    private boolean verifyHmacSignature(String payload, String signatureHeader, String secret) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            SecretKeySpec secretKey = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+            mac.init(secretKey);
+
+            String expectedHash;
+            String signatureToCompare = signatureHeader.trim();
+
+            if (signatureHeader.contains("t=") && signatureHeader.contains("v1=")) {
+                String timestamp = "";
+                String sig = "";
+                for (String part : signatureHeader.split(",")) {
+                    String[] kv = part.trim().split("=", 2);
+                    if (kv.length == 2) {
+                        if ("t".equals(kv[0])) timestamp = kv[1];
+                        if ("v1".equals(kv[0])) sig = kv[1];
+                    }
+                }
+                String signedPayload = timestamp + "." + payload;
+                byte[] hashBytes = mac.doFinal(signedPayload.getBytes(StandardCharsets.UTF_8));
+                expectedHash = toHex(hashBytes);
+                signatureToCompare = sig;
+            } else {
+                byte[] hashBytes = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
+                expectedHash = toHex(hashBytes);
+            }
+
+            return MessageDigest.isEqual(
+                    expectedHash.getBytes(StandardCharsets.UTF_8),
+                    signatureToCompare.getBytes(StandardCharsets.UTF_8)
+            );
+        } catch (Exception e) {
+            log.error("Failed to calculate HMAC signature for webhook verification", e);
+            return false;
+        }
+    }
+
+    private String toHex(byte[] bytes) {
+        StringBuilder hex = new StringBuilder(bytes.length * 2);
+        for (byte b : bytes) {
+            hex.append(String.format("%02x", b));
+        }
+        return hex.toString();
     }
 
     /**

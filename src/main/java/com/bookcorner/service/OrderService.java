@@ -34,6 +34,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -44,14 +45,13 @@ import java.util.UUID;
 
 /**
  * Order Fulfillment and Checkout Orchestration Service.
- * Implements the synchronous Checkout Saga:
+ * Implements the decoupled Checkout Saga:
  * 1. Validates active customer cart items and quantities.
- * 2. Locks and reserves inventory decrementing format stock balances.
- * 3. Freezes immutable JSONB address snapshots.
- * 4. Computes deterministic order totals (subtotal, coupon discount, shipping, tax).
- * 5. Executes payment authorization and captures transaction.
- * 6. Dispatches carrier shipping consignment, marks order CONFIRMED, and clears cart.
- * 7. Provides compensation restock and refunds upon cancellation.
+ * 2. Locks and reserves inventory decrementing format stock balances (Atomic DB TX).
+ * 3. Freezes immutable JSONB address snapshots and persists PENDING_PAYMENT order.
+ * 4. Executes payment authorization and captures transaction OUTSIDE of DB transaction.
+ * 5. Completes order (marks CONFIRMED, creates consignment, clears cart) in a separate DB TX.
+ * 6. Executes compensating restock and marks FAILED in a dedicated DB TX upon payment failure.
  */
 @Service
 @RequiredArgsConstructor
@@ -68,155 +68,165 @@ public class OrderService {
     private final PaymentService paymentService;
     private final ShippingService shippingService;
     private final OrderMapper orderMapper;
+    private final TransactionTemplate transactionTemplate;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
-     * Executes synchronous checkout saga for the customer's active cart.
+     * Executes decoupled checkout saga for the customer's active cart.
+     * Local database state transitions are decoupled from external network calls
+     * to avoid holding HikariCP database connections during payment gateway I/O.
      */
-    @Transactional
     public OrderConfirmationResponse checkout(UUID userId, CheckoutOrderRequest request) {
-        log.info("Initiating checkout saga for customer ID: {}", userId);
+        log.info("Initiating decoupled checkout saga for customer ID: {}", userId);
 
-        UserEntity user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
+        // Phase 1: Atomically validate, reserve inventory, and persist Order in PENDING_PAYMENT
+        OrderEntity pendingOrder = transactionTemplate.execute(status -> {
+            UserEntity user = userRepository.findById(userId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
 
-        CartEntity cart = cartService.getCartEntityForCheckout(userId);
-        if (cart.getItems().isEmpty()) {
-            throw new BusinessRuleViolationException("Cannot checkout an empty shopping cart.");
-        }
-
-        // 1. Resolve and serialize immutable address snapshots
-        String shippingAddressJson = resolveShippingAddressJson(userId, request);
-        String billingAddressJson = resolveBillingAddressJson(userId, request, shippingAddressJson);
-
-        // 2. Validate format stock availability and atomically reserve inventory
-        List<BookFormatEntity> reservedFormats = new ArrayList<>();
-        for (CartItemEntity cartItem : cart.getItems()) {
-            BookFormatEntity format = cartItem.getFormat();
-            int rowsUpdated = bookFormatRepository.decrementInventory(format.getId(), cartItem.getQuantity());
-            if (rowsUpdated == 0) {
-                // Compensating rollback for already reserved formats in this loop
-                for (BookFormatEntity reserved : reservedFormats) {
-                    CartItemEntity matching = cart.getItems().stream()
-                            .filter(ci -> ci.getFormat().getId().equals(reserved.getId()))
-                            .findFirst().orElse(null);
-                    if (matching != null) {
-                        bookFormatRepository.incrementInventory(reserved.getId(), matching.getQuantity());
-                    }
-                }
-                log.warn("Insufficient stock for SKU {} during checkout", format.getSku());
-                throw new InsufficientStockException(format.getSku(), cartItem.getQuantity(), format.getInventoryQuantity());
+            CartEntity cart = cartService.getCartEntityForCheckout(userId);
+            if (cart.getItems().isEmpty()) {
+                throw new BusinessRuleViolationException("Cannot checkout an empty shopping cart.");
             }
-            reservedFormats.add(format);
-        }
 
-        // 3. Calculate pricing breakdown
-        long subtotalCents = cart.getItems().stream()
-                .mapToLong(item -> item.getFormat().getBasePriceAmount() * item.getQuantity())
-                .sum();
+            // 1. Resolve and serialize immutable address snapshots
+            String shippingAddressJson = resolveShippingAddressJson(userId, request);
+            String billingAddressJson = resolveBillingAddressJson(userId, request, shippingAddressJson);
 
-        CouponEntity coupon = null;
-        if (request.getCouponCode() != null && !request.getCouponCode().isBlank()) {
-            coupon = couponService.validateCoupon(request.getCouponCode(), subtotalCents);
-        } else if (cart.getAppliedCoupon() != null) {
-            coupon = cart.getAppliedCoupon();
-        }
+            // 2. Validate format stock availability and atomically reserve inventory
+            List<BookFormatEntity> reservedFormats = new ArrayList<>();
+            for (CartItemEntity cartItem : cart.getItems()) {
+                BookFormatEntity format = cartItem.getFormat();
+                int rowsUpdated = bookFormatRepository.decrementInventory(format.getId(), cartItem.getQuantity());
+                if (rowsUpdated == 0) {
+                    for (BookFormatEntity reserved : reservedFormats) {
+                        CartItemEntity matching = cart.getItems().stream()
+                                .filter(ci -> ci.getFormat().getId().equals(reserved.getId()))
+                                .findFirst().orElse(null);
+                        if (matching != null) {
+                            bookFormatRepository.incrementInventory(reserved.getId(), matching.getQuantity());
+                        }
+                    }
+                    log.warn("Insufficient stock for SKU {} during checkout", format.getSku());
+                    throw new InsufficientStockException(format.getSku(), cartItem.getQuantity(), format.getInventoryQuantity());
+                }
+                reservedFormats.add(format);
+            }
 
-        long discountCents = (coupon != null) ? couponService.calculateDiscount(coupon, subtotalCents) : 0L;
-        long shippingCents = (subtotalCents >= 5000L) ? 0L : 499L; // Free shipping threshold $50.00
-        long taxableCents = Math.max(0L, subtotalCents - discountCents);
-        long taxCents = (long) (taxableCents * 0.08); // 8% sales tax estimate
-        long totalCents = taxableCents + shippingCents + taxCents;
+            // 3. Calculate pricing breakdown
+            long subtotalCents = cart.getItems().stream()
+                    .mapToLong(item -> item.getFormat().getBasePriceAmount() * item.getQuantity())
+                    .sum();
 
-        String currency = cart.getItems().get(0).getFormat().getCurrencyCode();
-        String orderNumber = "ORD-" + LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE) + "-"
-                + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+            CouponEntity coupon = null;
+            if (request.getCouponCode() != null && !request.getCouponCode().isBlank()) {
+                coupon = couponService.validateCoupon(request.getCouponCode(), subtotalCents);
+            } else if (cart.getAppliedCoupon() != null) {
+                coupon = cart.getAppliedCoupon();
+            }
 
-        // 4. Create and persist Order aggregate in PENDING_PAYMENT status
-        OrderEntity order = OrderEntity.builder()
-                .orderNumber(orderNumber)
-                .user(user)
-                .storeId(cart.getStoreId())
-                .coupon(coupon)
-                .orderStatus("PENDING_PAYMENT")
-                .subtotalAmount(subtotalCents)
-                .discountAmount(discountCents)
-                .shippingAmount(shippingCents)
-                .taxAmount(taxCents)
-                .totalAmount(totalCents)
-                .currencyCode(currency)
-                .shippingAddressSnapshot(shippingAddressJson)
-                .billingAddressSnapshot(billingAddressJson)
-                .placedAt(Instant.now())
-                .build();
+            long discountCents = (coupon != null) ? couponService.calculateDiscount(coupon, subtotalCents) : 0L;
+            long shippingCents = (subtotalCents >= 5000L) ? 0L : 499L; // Free shipping threshold $50.00
+            long taxableCents = Math.max(0L, subtotalCents - discountCents);
+            long taxCents = (long) (taxableCents * 0.08); // 8% sales tax estimate
+            long totalCents = taxableCents + shippingCents + taxCents;
 
-        // Add line items
-        for (CartItemEntity cartItem : cart.getItems()) {
-            BookFormatEntity format = cartItem.getFormat();
-            long itemSubtotal = format.getBasePriceAmount() * cartItem.getQuantity();
+            String currency = cart.getItems().get(0).getFormat().getCurrencyCode();
+            String orderNumber = "ORD-" + LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE) + "-"
+                    + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
-            long itemDiscount = (subtotalCents > 0) ? (discountCents * itemSubtotal) / subtotalCents : 0L;
-            long itemTax = (subtotalCents > 0) ? (taxCents * itemSubtotal) / subtotalCents : 0L;
-
-            OrderLineItemEntity lineItem = OrderLineItemEntity.builder()
-                    .order(order)
-                    .format(format)
-                    .bookTitleSnapshot(format.getBook().getTitle())
-                    .isbn13Snapshot(format.getBook().getIsbn13())
-                    .formatTypeSnapshot(format.getFormatType())
-                    .unitPriceAmount(format.getBasePriceAmount())
-                    .quantity(cartItem.getQuantity())
-                    .lineDiscountAmount(itemDiscount)
-                    .lineTaxAmount(itemTax)
-                    .lineTotalAmount(itemSubtotal)
+            // 4. Create and persist Order aggregate in PENDING_PAYMENT status
+            OrderEntity order = OrderEntity.builder()
+                    .orderNumber(orderNumber)
+                    .user(user)
+                    .storeId(cart.getStoreId())
+                    .coupon(coupon)
+                    .orderStatus("PENDING_PAYMENT")
+                    .subtotalAmount(subtotalCents)
+                    .discountAmount(discountCents)
+                    .shippingAmount(shippingCents)
+                    .taxAmount(taxCents)
+                    .totalAmount(totalCents)
+                    .currencyCode(currency)
+                    .shippingAddressSnapshot(shippingAddressJson)
+                    .billingAddressSnapshot(billingAddressJson)
+                    .placedAt(Instant.now())
                     .build();
 
-            order.addLineItem(lineItem);
+            for (CartItemEntity cartItem : cart.getItems()) {
+                BookFormatEntity format = cartItem.getFormat();
+                long itemSubtotal = format.getBasePriceAmount() * cartItem.getQuantity();
+
+                long itemDiscount = (subtotalCents > 0) ? (discountCents * itemSubtotal) / subtotalCents : 0L;
+                long itemTax = (subtotalCents > 0) ? (taxCents * itemSubtotal) / subtotalCents : 0L;
+
+                OrderLineItemEntity lineItem = OrderLineItemEntity.builder()
+                        .order(order)
+                        .format(format)
+                        .bookTitleSnapshot(format.getBook().getTitle())
+                        .isbn13Snapshot(format.getBook().getIsbn13())
+                        .formatTypeSnapshot(format.getFormatType())
+                        .unitPriceAmount(format.getBasePriceAmount())
+                        .quantity(cartItem.getQuantity())
+                        .lineDiscountAmount(itemDiscount)
+                        .lineTaxAmount(itemTax)
+                        .lineTotalAmount(itemSubtotal)
+                        .build();
+
+                order.addLineItem(lineItem);
+            }
+
+            order.addStatusTransition("DRAFT", "PENDING_PAYMENT", "Order initialized. Awaiting payment capture.");
+            OrderEntity saved = orderRepository.save(order);
+            log.info("Order {} persisted in PENDING_PAYMENT status. Total: {} cents", orderNumber, totalCents);
+            return saved;
+        });
+
+        // Phase 2: External payment capture executed OUTSIDE the database transaction
+        try {
+            paymentService.processOrderPayment(pendingOrder, request.getPaymentMethodToken(), "chk_" + pendingOrder.getOrderNumber());
+        } catch (Exception paymentEx) {
+            log.error("Payment failed for order {}. Initiating compensating inventory restock in dedicated transaction.",
+                    pendingOrder.getOrderNumber(), paymentEx);
+
+            transactionTemplate.executeWithoutResult(status -> {
+                OrderEntity orderToFail = orderRepository.findById(pendingOrder.getId()).orElse(pendingOrder);
+                for (OrderLineItemEntity lineItem : orderToFail.getLineItems()) {
+                    bookFormatRepository.incrementInventory(lineItem.getFormat().getId(), lineItem.getQuantity());
+                }
+                orderToFail.addStatusTransition("PENDING_PAYMENT", "FAILED", "Payment processing failed: " + paymentEx.getMessage());
+                orderRepository.save(orderToFail);
+            });
+
+            throw new BusinessRuleViolationException("Payment processing failed: " + paymentEx.getMessage());
         }
 
-        order.addStatusTransition("DRAFT", "PENDING_PAYMENT", "Order initialized. Awaiting payment capture.");
-        OrderEntity savedOrder = orderRepository.save(order);
-        log.info("Order {} persisted in PENDING_PAYMENT status. Total: {} cents", orderNumber, totalCents);
+        // Phase 3: Finalize order confirmation and fulfillment in dedicated database transaction
+        OrderEntity confirmedOrder = transactionTemplate.execute(status -> {
+            OrderEntity orderToConfirm = orderRepository.findById(pendingOrder.getId()).orElse(pendingOrder);
+            orderToConfirm.addStatusTransition("PENDING_PAYMENT", "CONFIRMED", "Payment authorized and captured. Order confirmed.");
+            orderToConfirm.setConfirmedAt(Instant.now());
 
-        // 5. Synchronously process and capture payment
-        try {
-            paymentService.processOrderPayment(savedOrder, request.getPaymentMethodToken(), "chk_" + savedOrder.getOrderNumber());
-            savedOrder.addStatusTransition("PENDING_PAYMENT", "CONFIRMED", "Payment authorized and captured. Order confirmed.");
-            savedOrder.setConfirmedAt(Instant.now());
-
-            // Redeem coupon
-            if (coupon != null) {
+            if (orderToConfirm.getCoupon() != null) {
                 try {
-                    couponService.redeemCoupon(coupon.getId());
+                    couponService.redeemCoupon(orderToConfirm.getCoupon().getId());
                 } catch (Exception e) {
                     log.warn("Failed to increment coupon redemption counter: {}", e.getMessage());
                 }
             }
 
-            // Create shipping consignment
-            shippingService.createConsignment(savedOrder, "FEDEX", "Standard Ground", shippingCents);
+            shippingService.createConsignment(orderToConfirm, "FEDEX", "Standard Ground", orderToConfirm.getShippingAmount());
 
-            // Clear customer cart
+            CartEntity cart = cartService.getCartEntityForCheckout(userId);
             cartService.clearCart(cart.getId());
 
-            OrderEntity confirmedOrder = orderRepository.save(savedOrder);
-            log.info("Order {} successfully confirmed!", confirmedOrder.getOrderNumber());
+            OrderEntity saved = orderRepository.save(orderToConfirm);
+            log.info("Order {} successfully confirmed!", saved.getOrderNumber());
+            return saved;
+        });
 
-            return orderMapper.toOrderConfirmationResponse(confirmedOrder);
-        } catch (Exception paymentEx) {
-            log.error("Payment failed for order {}. Initiating compensating inventory restock.", orderNumber, paymentEx);
-
-            // Compensation: Restock reserved inventory
-            for (CartItemEntity cartItem : cart.getItems()) {
-                bookFormatRepository.incrementInventory(cartItem.getFormat().getId(), cartItem.getQuantity());
-            }
-
-            savedOrder.addStatusTransition("PENDING_PAYMENT", "FAILED", "Payment processing failed: " + paymentEx.getMessage());
-            orderRepository.save(savedOrder);
-
-            throw new BusinessRuleViolationException("Payment processing failed: " + paymentEx.getMessage());
-        }
+        return orderMapper.toOrderConfirmationResponse(confirmedOrder);
     }
 
     /**

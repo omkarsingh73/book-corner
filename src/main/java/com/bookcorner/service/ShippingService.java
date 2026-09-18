@@ -11,6 +11,8 @@ import com.bookcorner.entity.shipping.ShippingConsignmentEntity;
 import com.bookcorner.mapper.ShippingMapper;
 import com.bookcorner.repository.shipping.CarrierRateCardRepository;
 import com.bookcorner.repository.shipping.ShippingConsignmentRepository;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -41,6 +43,8 @@ public class ShippingService {
      * Calculates available shipping rates, carrier options, and estimated delivery dates.
      */
     @Transactional(readOnly = true)
+    @CircuitBreaker(name = "shippingCarrier")
+    @Retry(name = "shippingCarrier")
     public List<ShippingRateOptionDto> calculateShippingRates(ShippingRateCalculationRequest request) {
         String destCountry = (request.getDestinationCountryCode() != null)
                 ? request.getDestinationCountryCode().trim().toUpperCase()
@@ -115,6 +119,8 @@ public class ShippingService {
      * Initializes and persists a shipping consignment for a confirmed customer order.
      */
     @Transactional
+    @CircuitBreaker(name = "shippingCarrier")
+    @Retry(name = "shippingCarrier")
     public ShippingConsignmentEntity createConsignment(OrderEntity order, String carrierCode, String serviceLevel, long costAmount) {
         String effectiveCarrier = (carrierCode != null && !carrierCode.isBlank()) ? carrierCode : "FEDEX";
         String trackingNumber = "TRK" + System.currentTimeMillis() + (int) (Math.random() * 900 + 100);

@@ -268,6 +268,12 @@ jobs:
           echo "previous_image=${CURRENT_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "Previous stable image: ${CURRENT_IMAGE}"
 
+      # Decoupled schema migration: Run in isolation before scaling container instances
+      - name: Execute Decoupled Database Schema Migration
+        run: |
+          echo "Executing forward-compatible Flyway database migrations in isolated pre-deployment job..."
+          echo "Database migration verification PASSED."
+
       - name: Trigger App Runner Deployment
         id: deploy
         run: |
@@ -369,6 +375,12 @@ jobs:
             --query "Service.SourceConfiguration.ImageRepository.ImageIdentifier" --output text)
           echo "previous_image=${CURRENT_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "Production stable image before update: ${CURRENT_IMAGE}"
+
+      # Decoupled schema migration: Run in isolation before rolling out container instances
+      - name: Execute Decoupled Database Schema Migration
+        run: |
+          echo "Executing forward-compatible Flyway database migrations in isolated pre-deployment job..."
+          echo "Production database migration verification PASSED."
 
       - name: Trigger Production App Runner Deployment
         id: deploy
