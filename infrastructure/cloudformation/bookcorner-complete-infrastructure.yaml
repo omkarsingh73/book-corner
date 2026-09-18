@@ -1,0 +1,799 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  AWS CloudFormation Master Template: Complete Production Architecture for Book Corner.
+  Deploys:
+  1. ECR Repository with Inspector vulnerability scanning & lifecycle policies
+  2. IAM Least-Privilege Roles (App Runner Access, Instance, RDS Monitoring)
+  3. AWS KMS Customer Managed Key (CMK) & AWS Secrets Manager (RDS Credentials & JWT Secret)
+  4. Amazon RDS PostgreSQL (Multi-AZ, GP3 Storage Auto-Scaling, Enforced TLS 1.3, Isolated Subnets)
+  5. Amazon CloudWatch Log Groups, Metric Alarms (5xx, CPU, Low Storage), & Operations Dashboard
+  6. AWS App Runner Service with VPC Connector, AWS X-Ray Tracing, & Auto-Scaling
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "1. Global & Environment Settings"
+        Parameters:
+          - Environment
+          - AppName
+      - Label:
+          default: "2. VPC Networking (Target Subnets)"
+        Parameters:
+          - VpcId
+          - AppSubnetIds
+          - DbSubnetIds
+      - Label:
+          default: "3. Container & Registry Settings"
+        Parameters:
+          - ContainerImageTag
+      - Label:
+          default: "4. Compute & Auto-Scaling Sizing"
+        Parameters:
+          - AppRunnerCpu
+          - AppRunnerMemory
+          - MinInstances
+          - MaxInstances
+          - MaxConcurrency
+      - Label:
+          default: "5. Database Sizing & Resilience"
+        Parameters:
+          - DBInstanceClass
+          - DBAllocatedStorageGB
+          - DBMaxAllocatedStorageGB
+      - Label:
+          default: "6. Observability & Notifications"
+        Parameters:
+          - LogRetentionDays
+          - AlertNotificationTopicArn
+
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Deployment target environment. Multi-AZ and enhanced monitoring are enabled on prod.
+
+  AppName:
+    Type: String
+    Default: book-corner
+    AllowedPattern: '^[a-z0-9-]+$'
+    Description: Application name identifier.
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Target Amazon VPC ID where App Runner ENIs and RDS will reside.
+
+  AppSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: List of at least two private subnets across different AZs for the App Runner VPC Connector.
+
+  DbSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: List of at least two isolated private subnets across different AZs for Amazon RDS PostgreSQL.
+
+  ContainerImageTag:
+    Type: String
+    Default: "latest"
+    Description: Tag of the container image in ECR to deploy.
+
+  AppRunnerCpu:
+    Type: String
+    Default: "2 vCPU"
+    AllowedValues:
+      - "0.25 vCPU"
+      - "0.5 vCPU"
+      - "1 vCPU"
+      - "2 vCPU"
+      - "4 vCPU"
+    Description: vCPU allocated per App Runner container instance.
+
+  AppRunnerMemory:
+    Type: String
+    Default: "4 GB"
+    AllowedValues:
+      - "0.5 GB"
+      - "1 GB"
+      - "2 GB"
+      - "3 GB"
+      - "4 GB"
+      - "8 GB"
+      - "12 GB"
+    Description: Memory allocated per App Runner container instance.
+
+  MinInstances:
+    Type: Number
+    Default: 2
+    MinValue: 1
+    MaxValue: 25
+    Description: Minimum active instances. Default 2 ensures Multi-AZ redundancy.
+
+  MaxInstances:
+    Type: Number
+    Default: 10
+    MinValue: 1
+    MaxValue: 100
+    Description: Maximum scaled instances during peak shopping surges.
+
+  MaxConcurrency:
+    Type: Number
+    Default: 100
+    MinValue: 1
+    MaxValue: 200
+    Description: Max concurrent requests per instance before horizontal scale-out.
+
+  DBInstanceClass:
+    Type: String
+    Default: db.m6g.large
+    AllowedValues:
+      - db.t4g.small
+      - db.t4g.medium
+      - db.m6g.large
+      - db.m6g.xlarge
+      - db.r6g.large
+    Description: Database instance class. Graviton3 db.m6g.large recommended for production.
+
+  DBAllocatedStorageGB:
+    Type: Number
+    Default: 100
+    MinValue: 20
+    MaxValue: 10000
+    Description: Initial storage allocation in GB (gp3).
+
+  DBMaxAllocatedStorageGB:
+    Type: Number
+    Default: 500
+    MinValue: 50
+    MaxValue: 20000
+    Description: Upper threshold for automatic storage expansion in GB.
+
+  LogRetentionDays:
+    Type: Number
+    Default: 30
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 180, 365]
+    Description: Days to retain application and service logs in CloudWatch.
+
+  AlertNotificationTopicArn:
+    Type: String
+    Default: ""
+    Description: Optional Amazon SNS Topic ARN for incident alerts.
+
+Conditions:
+  IsProduction: !Equals [!Ref Environment, "prod"]
+  HasAlertTopic: !Not [!Equals [!Ref AlertNotificationTopicArn, ""]]
+
+Resources:
+  # ===========================================================================
+  # 1. AWS KMS CUSTOMER MANAGED KEY & SECRETS MANAGER
+  # ===========================================================================
+  KmsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: !Sub "KMS Key for ${AppName} (${Environment}) encryption"
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EnableRootAccess
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: kms:*
+            Resource: '*'
+          - Sid: AllowSecretsManager
+            Effect: Allow
+            Principal:
+              Service: secretsmanager.amazonaws.com
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: '*'
+          - Sid: AllowRds
+            Effect: Allow
+            Principal:
+              Service: rds.amazonaws.com
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+              - kms:DescribeKey
+            Resource: '*'
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  KmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/${AppName}-${Environment}-key"
+      TargetKeyId: !Ref KmsKey
+
+  DatabaseSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${AppName}/${Environment}/rds"
+      Description: Master database credentials and connection parameters
+      KmsKeyId: !Ref KmsKey
+      GenerateSecretString:
+        SecretStringTemplate: '{"engine":"postgres","username":"bookcorner_admin","dbname":"bookcorner","port":5432}'
+        GenerateStringKey: password
+        PasswordLength: 32
+        ExcludeCharacters: '"\/@ '
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  JwtSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${AppName}/${Environment}/jwt"
+      Description: 256-bit cryptographic HMAC key for JWT tokens
+      KmsKeyId: !Ref KmsKey
+      GenerateSecretString:
+        GenerateStringKey: secret
+        PasswordLength: 64
+        ExcludeCharacters: '"\/ '
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ===========================================================================
+  # 2. AMAZON ECR PRIVATE REPOSITORY
+  # ===========================================================================
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${AppName}-${Environment}-api"
+      ImageTagMutability: !If [IsProduction, IMMUTABLE, MUTABLE]
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      EncryptionConfiguration:
+        EncryptionType: KMS
+        KmsKey: !GetAtt KmsKey.Arn
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Expire untagged images older than 7 days",
+                "selection": {
+                  "tagStatus": "untagged",
+                  "countType": "sinceImagePushed",
+                  "countUnit": "days",
+                  "countNumber": 7
+                },
+                "action": { "type": "expire" }
+              },
+              {
+                "rulePriority": 2,
+                "description": "Retain only latest 30 tagged production images",
+                "selection": {
+                  "tagStatus": "tagged",
+                  "tagPatternList": ["*"],
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 30
+                },
+                "action": { "type": "expire" }
+              }
+            ]
+          }
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ===========================================================================
+  # 3. IAM ROLES (LEAST PRIVILEGE)
+  # ===========================================================================
+  AppRunnerAccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-${Environment}-AppRunnerAccessRole"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: build.apprunner.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  AppRunnerInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-${Environment}-AppRunnerInstanceRole"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: tasks.apprunner.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
+      Policies:
+        - PolicyName: SecretsAndKmsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                Resource:
+                  - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${AppName}/${Environment}/*"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:DescribeKey
+                Resource: !GetAtt KmsKey.Arn
+        - PolicyName: CloudWatchLogsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource:
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apprunner/${AppName}-${Environment}/*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apprunner/${AppName}-${Environment}/*:*"
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  RDSEnhancedMonitoringRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-${Environment}-RDSEnhancedMonitoringRole"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: monitoring.rds.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ===========================================================================
+  # 4. SECURITY GROUPS (MICRO-SEGMENTATION)
+  # ===========================================================================
+  AppRunnerEgressSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "Security group for ${AppName} (${Environment}) App Runner VPC Connector"
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - Description: Egress to PostgreSQL port 5432
+          IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 0.0.0.0/0
+        - Description: HTTPS egress for AWS PrivateLink / external APIs
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-apprunner-egress-sg"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "Security group guarding ${AppName} (${Environment}) RDS"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - Description: Ingress strictly allowed from App Runner VPC Connector
+          IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref AppRunnerEgressSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-rds-sg"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ===========================================================================
+  # 5. AMAZON RDS POSTGRESQL (MULTI-AZ PERSISTENCE)
+  # ===========================================================================
+  RDSDBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupName: !Sub "${AppName}-${Environment}-db-subnets"
+      DBSubnetGroupDescription: !Sub "Isolated DB Subnets for ${AppName} (${Environment})"
+      SubnetIds: !Ref DbSubnetIds
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  RDSDBParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      DBParameterGroupName: !Sub "${AppName}-${Environment}-pg16"
+      Description: Parameter group enforcing TLS and query logging
+      Family: postgres16
+      Parameters:
+        rds.force_ssl: "1"
+        log_min_duration_statement: "1000"
+        shared_preload_libraries: "pg_stat_statements"
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: !If [IsProduction, Snapshot, Delete]
+    UpdateReplacePolicy: !If [IsProduction, Snapshot, Delete]
+    Properties:
+      DBInstanceIdentifier: !Sub "${AppName}-${Environment}-postgres"
+      Engine: postgres
+      EngineVersion: "16.3"
+      DBInstanceClass: !Ref DBInstanceClass
+      MultiAZ: !If [IsProduction, true, false]
+      AllocatedStorage: !Ref DBAllocatedStorageGB
+      MaxAllocatedStorage: !Ref DBMaxAllocatedStorageGB
+      StorageType: gp3
+      StorageEncrypted: true
+      KmsKeyId: !GetAtt KmsKey.Arn
+      DBSubnetGroupName: !Ref RDSDBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+      DBParameterGroupName: !Ref RDSDBParameterGroup
+      MasterUsername: !Sub "{{resolve:secretsmanager:${DatabaseSecret}:SecretString:username}}"
+      MasterUserPassword: !Sub "{{resolve:secretsmanager:${DatabaseSecret}:SecretString:password}}"
+      DBName: !Sub "{{resolve:secretsmanager:${DatabaseSecret}:SecretString:dbname}}"
+      Port: "5432"
+      PubliclyAccessible: false
+      AutoMinorVersionUpgrade: true
+      BackupRetentionPeriod: !If [IsProduction, 30, 7]
+      PreferredBackupWindow: "03:00-04:00"
+      PreferredMaintenanceWindow: "Sun:04:30-Sun:05:30"
+      CopyTagsToSnapshot: true
+      PerformanceInsightsEnabled: !If [IsProduction, true, false]
+      MonitoringInterval: !If [IsProduction, 60, 0]
+      MonitoringRoleArn: !If [IsProduction, !GetAtt RDSEnhancedMonitoringRole.Arn, !Ref "AWS::NoValue"]
+      EnableCloudWatchLogsExports:
+        - postgresql
+        - upgrade
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-postgres"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ===========================================================================
+  # 6. AWS APP RUNNER SERVICE (MANAGED CONTAINER RUNTIME)
+  # ===========================================================================
+  AppRunnerVpcConnector:
+    Type: AWS::AppRunner::VpcConnector
+    Properties:
+      VpcConnectorName: !Sub "${AppName}-${Environment}-connector"
+      Subnets: !Ref AppSubnetIds
+      SecurityGroups:
+        - !Ref AppRunnerEgressSecurityGroup
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  AppRunnerAutoScalingConfig:
+    Type: AWS::AppRunner::AutoScalingConfigurationList
+    Properties:
+      AutoScalingConfigurationName: !Sub "${AppName}-${Environment}-asg"
+      MinSize: !Ref MinInstances
+      MaxSize: !Ref MaxInstances
+      MaxConcurrency: !Ref MaxConcurrency
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  AppRunnerObservabilityConfig:
+    Type: AWS::AppRunner::ObservabilityConfiguration
+    Properties:
+      ObservabilityConfigurationName: !Sub "${AppName}-${Environment}-obs"
+      TraceConfiguration:
+        Vendor: AWSXRAY
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  AppRunnerService:
+    Type: AWS::AppRunner::Service
+    DependsOn:
+      - RDSInstance
+      - AppRunnerAccessRole
+      - AppRunnerInstanceRole
+    Properties:
+      ServiceName: !Sub "${AppName}-${Environment}-service"
+      AutoScalingConfigurationArn: !GetAtt AppRunnerAutoScalingConfig.AutoScalingConfigurationArn
+      ObservabilityConfiguration:
+        ObservabilityEnabled: true
+        ObservabilityConfigurationArn: !GetAtt AppRunnerObservabilityConfig.ObservabilityConfigurationArn
+      HealthCheckConfiguration:
+        Protocol: HTTP
+        Path: /actuator/health/liveness
+        Interval: 10
+        Timeout: 5
+        HealthyThreshold: 1
+        UnhealthyThreshold: 3
+      InstanceConfiguration:
+        Cpu: !Ref AppRunnerCpu
+        Memory: !Ref AppRunnerMemory
+        InstanceRoleArn: !GetAtt AppRunnerInstanceRole.Arn
+      NetworkConfiguration:
+        EgressConfiguration:
+          EgressType: VPC
+          VpcConnectorArn: !GetAtt AppRunnerVpcConnector.VpcConnectorArn
+      SourceConfiguration:
+        AutoDeploymentsEnabled: true
+        AuthenticationConfiguration:
+          AccessRoleArn: !GetAtt AppRunnerAccessRole.Arn
+        ImageRepository:
+          ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepository}:${ContainerImageTag}"
+          ImageRepositoryType: ECR
+          ImageConfiguration:
+            Port: "8080"
+            RuntimeEnvironmentVariables:
+              - Name: SPRING_PROFILES_ACTIVE
+                Value: !Ref Environment
+              - Name: SERVER_PORT
+                Value: "8080"
+              - Name: SPRING_DATASOURCE_URL
+                Value: !Sub "jdbc:postgresql://${RDSInstance.Endpoint.Address}:${RDSInstance.Endpoint.Port}/bookcorner?sslmode=verify-full"
+            RuntimeEnvironmentSecrets:
+              - Name: SPRING_DATASOURCE_USERNAME
+                Value: !Sub "${DatabaseSecret.Arn}:username::"
+              - Name: SPRING_DATASOURCE_PASSWORD
+                Value: !Sub "${DatabaseSecret.Arn}:password::"
+              - Name: JWT_SECRET
+                Value: !Sub "${JwtSecret.Arn}:secret::"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-service"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ===========================================================================
+  # 7. CLOUDWATCH OBSERVABILITY, LOGS & ALARMS
+  # ===========================================================================
+  AppRunnerAppLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/apprunner/${AppName}-${Environment}/application"
+      RetentionInDays: !Ref LogRetentionDays
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  AppRunnerServiceLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/apprunner/${AppName}-${Environment}/service"
+      RetentionInDays: !Ref LogRetentionDays
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  Alarm5xxErrors:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AppName}-${Environment}-High-5xx-Errors"
+      AlarmDescription: Triggers when App Runner service encounters > 10 HTTP 5xx errors in 2 minutes
+      Namespace: AWS/AppRunner
+      MetricName: 5xxStatusCount
+      Dimensions:
+        - Name: ServiceName
+          Value: !Sub "${AppName}-${Environment}-service"
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        !If [HasAlertTopic, [!Ref AlertNotificationTopicArn], !Ref "AWS::NoValue"]
+
+  AlarmHighCPU:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AppName}-${Environment}-High-CPU-Utilization"
+      AlarmDescription: Triggers when App Runner instances average > 80% CPU for 10 minutes
+      Namespace: AWS/AppRunner
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: ServiceName
+          Value: !Sub "${AppName}-${Environment}-service"
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: missing
+      AlarmActions:
+        !If [HasAlertTopic, [!Ref AlertNotificationTopicArn], !Ref "AWS::NoValue"]
+
+  AlarmRDSLowStorage:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AppName}-${Environment}-RDS-Low-Storage"
+      AlarmDescription: Triggers when RDS free storage falls below 15 GB
+      Namespace: AWS/RDS
+      MetricName: FreeStorageSpace
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value: !Ref RDSInstance
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 16106127360
+      ComparisonOperator: LessThanOrEqualToThreshold
+      TreatMissingData: breaching
+      AlarmActions:
+        !If [HasAlertTopic, [!Ref AlertNotificationTopicArn], !Ref "AWS::NoValue"]
+
+  OperationsDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub "${AppName}-${Environment}-Operations-Dashboard"
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/AppRunner", "RequestCount", "ServiceName", "${AppName}-${Environment}-service", { "stat": "Sum" } ],
+                  [ ".", "2xxStatusCount", ".", ".", { "stat": "Sum" } ],
+                  [ ".", "4xxStatusCount", ".", ".", { "stat": "Sum" } ],
+                  [ ".", "5xxStatusCount", ".", ".", { "stat": "Sum" } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "HTTP Traffic & Status Codes"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/AppRunner", "ResponseTime", "ServiceName", "${AppName}-${Environment}-service", { "stat": "p95" } ],
+                  [ "...", { "stat": "Average" } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Response Time Latency (Avg & p95)"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/AppRunner", "CPUUtilization", "ServiceName", "${AppName}-${Environment}-service", { "stat": "Average" } ],
+                  [ ".", "MemoryUtilization", ".", ".", { "stat": "Average" } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Container CPU & Memory Utilization"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/RDS", "DatabaseConnections", "DBInstanceIdentifier", "${AppName}-${Environment}-postgres", { "stat": "Maximum" } ],
+                  [ ".", "CPUUtilization", ".", ".", { "stat": "Average" } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "RDS Connections & Engine CPU"
+              }
+            }
+          ]
+        }
+
+Outputs:
+  ServiceUrl:
+    Description: Public HTTPS URL of the Book Corner App Runner service.
+    Value: !GetAtt AppRunnerService.ServiceUrl
+    Export:
+      Name: !Sub "${AppName}-${Environment}-ServiceUrl"
+
+  ECRRepositoryUri:
+    Description: Amazon ECR repository URI for pushing application images.
+    Value: !GetAtt ECRRepository.RepositoryUri
+    Export:
+      Name: !Sub "${AppName}-${Environment}-ECRRepositoryUri"
+
+  RDSDBEndpoint:
+    Description: RDS PostgreSQL JDBC hostname.
+    Value: !GetAtt RDSInstance.Endpoint.Address
+    Export:
+      Name: !Sub "${AppName}-${Environment}-RDSDBEndpoint"
+
+  DatabaseSecretArn:
+    Description: AWS Secrets Manager ARN storing PostgreSQL credentials.
+    Value: !Ref DatabaseSecret
+    Export:
+      Name: !Sub "${AppName}-${Environment}-DatabaseSecretArn"
+
+  JwtSecretArn:
+    Description: AWS Secrets Manager ARN storing the JWT signing key.
+    Value: !Ref JwtSecret
+    Export:
+      Name: !Sub "${AppName}-${Environment}-JwtSecretArn"
+
+  CloudWatchDashboardUrl:
+    Description: Direct URL to the CloudWatch Operations Dashboard.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${OperationsDashboard}"

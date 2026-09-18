@@ -1,0 +1,311 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  AWS CloudFormation Template: AWS App Runner Service for Book Corner Spring Boot Platform.
+  Provisions fully managed container execution, private VPC Connector for secure RDS access,
+  AWS X-Ray distributed tracing, auto-scaling, and health check integration with Spring Boot Actuator.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Environment & Application Configuration"
+        Parameters:
+          - Environment
+          - AppName
+          - ImageUri
+      - Label:
+          default: "VPC Networking & Connectors"
+        Parameters:
+          - VpcId
+          - AppSubnetIds
+      - Label:
+          default: "IAM Roles Integration"
+        Parameters:
+          - AppRunnerAccessRoleArn
+          - AppRunnerInstanceRoleArn
+      - Label:
+          default: "Database Connectivity & Secrets"
+        Parameters:
+          - DBEndpointAddress
+          - DBEndpointPort
+          - DatabaseSecretArn
+          - JwtSecretArn
+      - Label:
+          default: "Compute Sizing & Auto-Scaling"
+        Parameters:
+          - InstanceCpu
+          - InstanceMemory
+          - MinInstances
+          - MaxInstances
+          - MaxConcurrency
+
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Deployment target environment.
+
+  AppName:
+    Type: String
+    Default: book-corner
+    AllowedPattern: '^[a-z0-9-]+$'
+    Description: Application name identifier.
+
+  ImageUri:
+    Type: String
+    Description: Complete Amazon ECR image URI (e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com/book-corner-prod-api:latest).
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Target VPC ID for egress routing.
+
+  AppSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: List of at least two private subnets across different AZs for the App Runner VPC Connector.
+
+  AppRunnerAccessRoleArn:
+    Type: String
+    Description: IAM Role ARN granting App Runner permission to pull container images from ECR.
+
+  AppRunnerInstanceRoleArn:
+    Type: String
+    Description: IAM Role ARN assumed by running containers for Secrets Manager, CloudWatch, and X-Ray.
+
+  DBEndpointAddress:
+    Type: String
+    Description: Hostname of the Amazon RDS PostgreSQL instance.
+
+  DBEndpointPort:
+    Type: String
+    Default: "5432"
+    Description: PostgreSQL port.
+
+  DatabaseSecretArn:
+    Type: String
+    Description: Secrets Manager Secret ARN storing database credentials (username and password).
+
+  JwtSecretArn:
+    Type: String
+    Description: Secrets Manager Secret ARN storing the JWT signing secret.
+
+  InstanceCpu:
+    Type: String
+    Default: "2 vCPU"
+    AllowedValues:
+      - "0.25 vCPU"
+      - "0.5 vCPU"
+      - "1 vCPU"
+      - "2 vCPU"
+      - "4 vCPU"
+    Description: vCPU allocated per App Runner container instance.
+
+  InstanceMemory:
+    Type: String
+    Default: "4 GB"
+    AllowedValues:
+      - "0.5 GB"
+      - "1 GB"
+      - "2 GB"
+      - "3 GB"
+      - "4 GB"
+      - "8 GB"
+      - "12 GB"
+    Description: Memory allocated per App Runner container instance.
+
+  MinInstances:
+    Type: Number
+    Default: 2
+    MinValue: 1
+    MaxValue: 25
+    Description: Minimum active instances. Production defaults to 2 for Multi-AZ high availability.
+
+  MaxInstances:
+    Type: Number
+    Default: 10
+    MinValue: 1
+    MaxValue: 100
+    Description: Maximum scaled instances allowed during peak traffic surges.
+
+  MaxConcurrency:
+    Type: Number
+    Default: 100
+    MinValue: 1
+    MaxValue: 200
+    Description: Maximum concurrent requests per instance before horizontal scale-out.
+
+Conditions:
+  IsProduction: !Equals [!Ref Environment, "prod"]
+
+Resources:
+  # ---------------------------------------------------------------------------
+  # 1. App Runner Egress Security Group
+  # ---------------------------------------------------------------------------
+  AppRunnerEgressSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "Security group for ${AppName} (${Environment}) App Runner VPC Connector"
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - Description: Allow egress to PostgreSQL RDS
+          IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 0.0.0.0/0
+        - Description: Allow HTTPS egress for AWS PrivateLink endpoints and external APIs
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-apprunner-egress-sg"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ---------------------------------------------------------------------------
+  # 2. App Runner VPC Connector
+  # Connects managed container instances to the VPC private subnets
+  # ---------------------------------------------------------------------------
+  AppRunnerVpcConnector:
+    Type: AWS::AppRunner::VpcConnector
+    Properties:
+      VpcConnectorName: !Sub "${AppName}-${Environment}-vpc-connector"
+      Subnets: !Ref AppSubnetIds
+      SecurityGroups:
+        - !Ref AppRunnerEgressSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-vpc-connector"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ---------------------------------------------------------------------------
+  # 3. Auto-Scaling Configuration
+  # ---------------------------------------------------------------------------
+  AppRunnerAutoScalingConfig:
+    Type: AWS::AppRunner::AutoScalingConfigurationList
+    Properties:
+      AutoScalingConfigurationName: !Sub "${AppName}-${Environment}-asg-config"
+      MinSize: !Ref MinInstances
+      MaxSize: !Ref MaxInstances
+      MaxConcurrency: !Ref MaxConcurrency
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ---------------------------------------------------------------------------
+  # 4. Observability Configuration (AWS X-Ray)
+  # ---------------------------------------------------------------------------
+  AppRunnerObservabilityConfig:
+    Type: AWS::AppRunner::ObservabilityConfiguration
+    Properties:
+      ObservabilityConfigurationName: !Sub "${AppName}-${Environment}-xray-config"
+      TraceConfiguration:
+        Vendor: AWSXRAY
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ---------------------------------------------------------------------------
+  # 5. AWS App Runner Core Service
+  # ---------------------------------------------------------------------------
+  AppRunnerService:
+    Type: AWS::AppRunner::Service
+    Properties:
+      ServiceName: !Sub "${AppName}-${Environment}-service"
+      AutoScalingConfigurationArn: !GetAtt AppRunnerAutoScalingConfig.AutoScalingConfigurationArn
+      ObservabilityConfiguration:
+        ObservabilityEnabled: true
+        ObservabilityConfigurationArn: !GetAtt AppRunnerObservabilityConfig.ObservabilityConfigurationArn
+      HealthCheckConfiguration:
+        Protocol: HTTP
+        Path: /actuator/health/liveness
+        Interval: 10
+        Timeout: 5
+        HealthyThreshold: 1
+        UnhealthyThreshold: 3
+      InstanceConfiguration:
+        Cpu: !Ref InstanceCpu
+        Memory: !Ref InstanceMemory
+        InstanceRoleArn: !Ref AppRunnerInstanceRoleArn
+      NetworkConfiguration:
+        EgressConfiguration:
+          EgressType: VPC
+          VpcConnectorArn: !GetAtt AppRunnerVpcConnector.VpcConnectorArn
+      SourceConfiguration:
+        AutoDeploymentsEnabled: true
+        AuthenticationConfiguration:
+          AccessRoleArn: !Ref AppRunnerAccessRoleArn
+        ImageRepository:
+          ImageIdentifier: !Ref ImageUri
+          ImageRepositoryType: ECR
+          ImageConfiguration:
+            Port: "8080"
+            RuntimeEnvironmentVariables:
+              - Name: SPRING_PROFILES_ACTIVE
+                Value: !Ref Environment
+              - Name: SERVER_PORT
+                Value: "8080"
+              - Name: SPRING_DATASOURCE_URL
+                Value: !Sub "jdbc:postgresql://${DBEndpointAddress}:${DBEndpointPort}/bookcorner?sslmode=verify-full"
+            RuntimeEnvironmentSecrets:
+              - Name: SPRING_DATASOURCE_USERNAME
+                Value: !Sub "${DatabaseSecretArn}:username::"
+              - Name: SPRING_DATASOURCE_PASSWORD
+                Value: !Sub "${DatabaseSecretArn}:password::"
+              - Name: JWT_SECRET
+                Value: !Sub "${JwtSecretArn}:secret::"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-service"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+  ServiceArn:
+    Description: The Amazon Resource Name (ARN) of the App Runner service.
+    Value: !GetAtt AppRunnerService.ServiceArn
+    Export:
+      Name: !Sub "${AppName}-${Environment}-ServiceArn"
+
+  ServiceId:
+    Description: Unique identifier of the App Runner service.
+    Value: !GetAtt AppRunnerService.ServiceId
+    Export:
+      Name: !Sub "${AppName}-${Environment}-ServiceId"
+
+  ServiceUrl:
+    Description: The public HTTPS endpoint domain assigned to the App Runner service.
+    Value: !GetAtt AppRunnerService.ServiceUrl
+    Export:
+      Name: !Sub "${AppName}-${Environment}-ServiceUrl"
+
+  VpcConnectorArn:
+    Description: ARN of the App Runner VPC Connector.
+    Value: !GetAtt AppRunnerVpcConnector.VpcConnectorArn
+    Export:
+      Name: !Sub "${AppName}-${Environment}-VpcConnectorArn"
+
+  AppRunnerSecurityGroupId:
+    Description: Security Group ID for the App Runner VPC Connector.
+    Value: !Ref AppRunnerEgressSecurityGroup
+    Export:
+      Name: !Sub "${AppName}-${Environment}-AppRunnerSecurityGroupId"

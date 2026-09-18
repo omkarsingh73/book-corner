@@ -1,0 +1,170 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  AWS CloudFormation Template: IAM Roles & Least-Privilege Policies for Book Corner Platform.
+  Includes App Runner Access Role (ECR pull), App Runner Instance Execution Role
+  (X-Ray tracing, CloudWatch logging, Secrets Manager access), and RDS Enhanced Monitoring Role.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Environment Configuration"
+        Parameters:
+          - Environment
+          - AppName
+      - Label:
+          default: "Secrets & KMS Scoping"
+        Parameters:
+          - KmsKeyArn
+
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Deployment target environment (dev, staging, prod).
+
+  AppName:
+    Type: String
+    Default: book-corner
+    AllowedPattern: '^[a-z0-9-]+$'
+    Description: Application name identifier used in resource naming and scoping.
+
+  KmsKeyArn:
+    Type: String
+    Default: "*"
+    Description: >
+      ARN of the KMS Key used to encrypt secrets and data. Default '*' or scoped to specific CMK ARN.
+
+Resources:
+  # ---------------------------------------------------------------------------
+  # 1. App Runner Service Access Role (Build / Deploy Time)
+  # Allows App Runner to pull images and authenticate with Amazon ECR
+  # ---------------------------------------------------------------------------
+  AppRunnerAccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-${Environment}-AppRunnerAccessRole"
+      Description: IAM role granting AWS App Runner permissions to pull images from Amazon ECR.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: build.apprunner.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ---------------------------------------------------------------------------
+  # 2. App Runner Instance Execution Role (Application Runtime)
+  # Grants running Spring Boot containers access to Secrets Manager, CloudWatch,
+  # and AWS X-Ray distributed tracing.
+  # ---------------------------------------------------------------------------
+  AppRunnerInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-${Environment}-AppRunnerInstanceRole"
+      Description: IAM execution role assumed by Spring Boot containers inside AWS App Runner.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: tasks.apprunner.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
+      Policies:
+        - PolicyName: !Sub "${AppName}-${Environment}-AppRunnerSecretsPolicy"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: AllowGetSecrets
+                Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                Resource:
+                  - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${AppName}/${Environment}/*"
+              - Sid: AllowKmsDecrypt
+                Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:DescribeKey
+                Resource: !Ref KmsKeyArn
+        - PolicyName: !Sub "${AppName}-${Environment}-AppRunnerCloudWatchLogsPolicy"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: AllowCloudWatchLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource:
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apprunner/${AppName}-${Environment}/*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apprunner/${AppName}-${Environment}/*:*"
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ---------------------------------------------------------------------------
+  # 3. RDS Enhanced Monitoring Role
+  # Grants Amazon RDS permission to send OS metrics to CloudWatch Logs
+  # ---------------------------------------------------------------------------
+  RDSEnhancedMonitoringRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-${Environment}-RDSEnhancedMonitoringRole"
+      Description: IAM role enabling Amazon RDS to stream real-time OS metrics to CloudWatch Logs.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: monitoring.rds.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+  AppRunnerAccessRoleArn:
+    Description: ARN of the App Runner Access Role used for pulling ECR images.
+    Value: !GetAtt AppRunnerAccessRole.Arn
+    Export:
+      Name: !Sub "${AppName}-${Environment}-AppRunnerAccessRoleArn"
+
+  AppRunnerInstanceRoleArn:
+    Description: ARN of the App Runner Instance Role assumed by Spring Boot containers.
+    Value: !GetAtt AppRunnerInstanceRole.Arn
+    Export:
+      Name: !Sub "${AppName}-${Environment}-AppRunnerInstanceRoleArn"
+
+  RDSEnhancedMonitoringRoleArn:
+    Description: ARN of the RDS Enhanced Monitoring Role.
+    Value: !GetAtt RDSEnhancedMonitoringRole.Arn
+    Export:
+      Name: !Sub "${AppName}-${Environment}-RDSEnhancedMonitoringRoleArn"

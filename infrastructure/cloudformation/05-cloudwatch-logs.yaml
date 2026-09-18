@@ -1,0 +1,271 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  AWS CloudFormation Template: Amazon CloudWatch Logs, Metric Alarms, and Observability Dashboard
+  for Book Corner Platform. Provisions structured application log retention, latency & error rate alarms,
+  RDS storage/connection monitors, and a unified executive dashboard.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Environment Configuration"
+        Parameters:
+          - Environment
+          - AppName
+      - Label:
+          default: "Monitored Resource Identifiers"
+        Parameters:
+          - AppRunnerServiceName
+          - RDSInstanceIdentifier
+      - Label:
+          default: "Telemetry Retention & Notifications"
+        Parameters:
+          - LogRetentionDays
+          - AlertNotificationTopicArn
+
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Deployment target environment.
+
+  AppName:
+    Type: String
+    Default: book-corner
+    AllowedPattern: '^[a-z0-9-]+$'
+    Description: Application name identifier.
+
+  AppRunnerServiceName:
+    Type: String
+    Description: Name of the AWS App Runner service being monitored.
+
+  RDSInstanceIdentifier:
+    Type: String
+    Description: Identifier of the Amazon RDS PostgreSQL instance.
+
+  LogRetentionDays:
+    Type: Number
+    Default: 30
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 180, 365]
+    Description: Number of days to retain application and container logs before automatic expiration.
+
+  AlertNotificationTopicArn:
+    Type: String
+    Default: ""
+    Description: Optional Amazon SNS Topic ARN for sending alarm notifications to PagerDuty or Slack.
+
+Conditions:
+  HasAlertTopic: !Not [!Equals [!Ref AlertNotificationTopicArn, ""]]
+  IsProduction: !Equals [!Ref Environment, "prod"]
+
+Resources:
+  # ---------------------------------------------------------------------------
+  # 1. CloudWatch Log Groups
+  # ---------------------------------------------------------------------------
+  AppRunnerApplicationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/apprunner/${AppName}-${Environment}/application"
+      RetentionInDays: !Ref LogRetentionDays
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  AppRunnerServiceLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/apprunner/${AppName}-${Environment}/service"
+      RetentionInDays: !Ref LogRetentionDays
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ---------------------------------------------------------------------------
+  # 2. CloudWatch Metric Alarms
+  # ---------------------------------------------------------------------------
+  High5xxErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AppName}-${Environment}-High-5xx-Errors"
+      AlarmDescription: Triggered when App Runner service encounters more than 10 HTTP 5xx errors in 2 minutes.
+      Namespace: AWS/AppRunner
+      MetricName: 5xxStatusCount
+      Dimensions:
+        - Name: ServiceName
+          Value: !Ref AppRunnerServiceName
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        !If [HasAlertTopic, [!Ref AlertNotificationTopicArn], !Ref "AWS::NoValue"]
+      OKActions:
+        !If [HasAlertTopic, [!Ref AlertNotificationTopicArn], !Ref "AWS::NoValue"]
+
+  HighCPUUtilizationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AppName}-${Environment}-High-CPU-Utilization"
+      AlarmDescription: Triggered when App Runner instances average > 80% CPU for 10 minutes.
+      Namespace: AWS/AppRunner
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: ServiceName
+          Value: !Ref AppRunnerServiceName
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: missing
+      AlarmActions:
+        !If [HasAlertTopic, [!Ref AlertNotificationTopicArn], !Ref "AWS::NoValue"]
+
+  RDSLowFreeStorageAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AppName}-${Environment}-RDS-Low-Storage"
+      AlarmDescription: Triggered when RDS free storage falls below 15 GB.
+      Namespace: AWS/RDS
+      MetricName: FreeStorageSpace
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value: !Ref RDSInstanceIdentifier
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 16106127360  # 15 GB in bytes
+      ComparisonOperator: LessThanOrEqualToThreshold
+      TreatMissingData: breaching
+      AlarmActions:
+        !If [HasAlertTopic, [!Ref AlertNotificationTopicArn], !Ref "AWS::NoValue"]
+
+  RDSHighConnectionsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AppName}-${Environment}-RDS-High-Connections"
+      AlarmDescription: Triggered when RDS active database connections spike above safe threshold (150).
+      Namespace: AWS/RDS
+      MetricName: DatabaseConnections
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value: !Ref RDSInstanceIdentifier
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 150
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        !If [HasAlertTopic, [!Ref AlertNotificationTopicArn], !Ref "AWS::NoValue"]
+
+  # ---------------------------------------------------------------------------
+  # 3. Unified Operations Dashboard
+  # ---------------------------------------------------------------------------
+  OperationsDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub "${AppName}-${Environment}-Operations-Dashboard"
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/AppRunner", "RequestCount", "ServiceName", "${AppRunnerServiceName}", { "stat": "Sum" } ],
+                  [ ".", "2xxStatusCount", ".", ".", { "stat": "Sum" } ],
+                  [ ".", "4xxStatusCount", ".", ".", { "stat": "Sum" } ],
+                  [ ".", "5xxStatusCount", ".", ".", { "stat": "Sum" } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "App Runner HTTP Request Volume & Status Codes"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/AppRunner", "ResponseTime", "ServiceName", "${AppRunnerServiceName}", { "stat": "p95" } ],
+                  [ "...", { "stat": "p99" } ],
+                  [ "...", { "stat": "Average" } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "App Runner Latency (Avg, p95, p99)"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/AppRunner", "CPUUtilization", "ServiceName", "${AppRunnerServiceName}", { "stat": "Average" } ],
+                  [ ".", "MemoryUtilization", ".", ".", { "stat": "Average" } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Container CPU & Memory Utilization"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/RDS", "DatabaseConnections", "DBInstanceIdentifier", "${RDSInstanceIdentifier}", { "stat": "Maximum" } ],
+                  [ ".", "CPUUtilization", ".", ".", { "stat": "Average" } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "RDS PostgreSQL Connections & CPU"
+              }
+            }
+          ]
+        }
+
+Outputs:
+  ApplicationLogGroupName:
+    Description: Name of the App Runner application log group.
+    Value: !Ref AppRunnerApplicationLogGroup
+    Export:
+      Name: !Sub "${AppName}-${Environment}-AppLogGroupName"
+
+  DashboardName:
+    Description: Name of the CloudWatch Operations Dashboard.
+    Value: !Ref OperationsDashboard
+    Export:
+      Name: !Sub "${AppName}-${Environment}-DashboardName"

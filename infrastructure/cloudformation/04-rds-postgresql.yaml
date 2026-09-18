@@ -1,0 +1,245 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  AWS CloudFormation Template: Amazon RDS for PostgreSQL (Multi-AZ) for Book Corner Platform.
+  Provisions high-availability transactional persistence, GP3 auto-scaling storage,
+  parameter groups enforcing TLS/SSL, private subnet isolation, and automated snapshots.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Environment & Application Configuration"
+        Parameters:
+          - Environment
+          - AppName
+      - Label:
+          default: "VPC Networking & Subnets"
+        Parameters:
+          - VpcId
+          - DbSubnetIds
+          - AppRunnerSecurityGroupId
+      - Label:
+          default: "Database Engine & Instance Sizing"
+        Parameters:
+          - DBEngineVersion
+          - DBInstanceClass
+          - AllocatedStorageGB
+          - MaxAllocatedStorageGB
+      - Label:
+          default: "Security & Credentials Integration"
+        Parameters:
+          - DatabaseSecretArn
+          - KmsKeyArn
+          - MonitoringRoleArn
+
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Deployment target environment (dev, staging, prod).
+
+  AppName:
+    Type: String
+    Default: book-corner
+    AllowedPattern: '^[a-z0-9-]+$'
+    Description: Application name identifier.
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID where the RDS DB instance and subnets reside.
+
+  DbSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: List of at least two private, isolated database subnets spanning different AZs.
+
+  AppRunnerSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Security Group ID of the App Runner VPC Connector allowed to access the database.
+
+  DatabaseSecretArn:
+    Type: String
+    Description: Secrets Manager ARN containing master database username and password.
+
+  KmsKeyArn:
+    Type: String
+    Description: ARN of the KMS Customer Managed Key used for storage volume encryption.
+
+  MonitoringRoleArn:
+    Type: String
+    Default: ""
+    Description: Optional IAM Role ARN for RDS Enhanced Monitoring.
+
+  DBEngineVersion:
+    Type: String
+    Default: "16.3"
+    Description: PostgreSQL engine version.
+
+  DBInstanceClass:
+    Type: String
+    Default: db.m6g.large
+    AllowedValues:
+      - db.t4g.micro
+      - db.t4g.small
+      - db.t4g.medium
+      - db.m6g.large
+      - db.m6g.xlarge
+      - db.r6g.large
+    Description: RDS DB instance type. Production defaults to AWS Graviton3 db.m6g.large.
+
+  AllocatedStorageGB:
+    Type: Number
+    Default: 100
+    MinValue: 20
+    MaxValue: 10000
+    Description: Baseline allocated storage in GB (gp3).
+
+  MaxAllocatedStorageGB:
+    Type: Number
+    Default: 500
+    MinValue: 50
+    MaxValue: 20000
+    Description: Maximum auto-scaling storage limit in GB.
+
+Conditions:
+  IsProduction: !Equals [!Ref Environment, "prod"]
+  HasMonitoringRole: !Not [!Equals [!Ref MonitoringRoleArn, ""]]
+
+Resources:
+  # ---------------------------------------------------------------------------
+  # 1. DB Subnet Group
+  # ---------------------------------------------------------------------------
+  RDSDBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupName: !Sub "${AppName}-${Environment}-db-subnet-group"
+      DBSubnetGroupDescription: !Sub "Private isolated subnets for ${AppName} (${Environment}) RDS"
+      SubnetIds: !Ref DbSubnetIds
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-db-subnet-group"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ---------------------------------------------------------------------------
+  # 2. DB Parameter Group (Enforces TLS & Performance Insights Logging)
+  # ---------------------------------------------------------------------------
+  RDSDBParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      DBParameterGroupName: !Sub "${AppName}-${Environment}-pg16-params"
+      Description: !Sub "PostgreSQL 16 parameter group with enforced TLS and query statistics for ${AppName}"
+      Family: postgres16
+      Parameters:
+        rds.force_ssl: "1"
+        log_min_duration_statement: "1000"
+        shared_preload_libraries: "pg_stat_statements"
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ---------------------------------------------------------------------------
+  # 3. RDS Security Group (Micro-segmentation)
+  # Ingress strictly from App Runner VPC Connector Security Group
+  # ---------------------------------------------------------------------------
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "Security group for ${AppName} (${Environment}) PostgreSQL RDS"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - Description: Ingress strictly allowed from App Runner VPC Connector on PostgreSQL port 5432
+          IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref AppRunnerSecurityGroupId
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-rds-sg"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ---------------------------------------------------------------------------
+  # 4. Amazon RDS PostgreSQL DB Instance
+  # ---------------------------------------------------------------------------
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: !If [IsProduction, Snapshot, Delete]
+    UpdateReplacePolicy: !If [IsProduction, Snapshot, Delete]
+    Properties:
+      DBInstanceIdentifier: !Sub "${AppName}-${Environment}-postgres"
+      Engine: postgres
+      EngineVersion: !Ref DBEngineVersion
+      DBInstanceClass: !Ref DBInstanceClass
+      MultiAZ: !If [IsProduction, true, false]
+      AllocatedStorage: !Ref AllocatedStorageGB
+      MaxAllocatedStorage: !Ref MaxAllocatedStorageGB
+      StorageType: gp3
+      StorageEncrypted: true
+      KmsKeyId: !Ref KmsKeyArn
+      DBSubnetGroupName: !Ref RDSDBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+      DBParameterGroupName: !Ref RDSDBParameterGroup
+      MasterUsername: !Sub "{{resolve:secretsmanager:${DatabaseSecretArn}:SecretString:username}}"
+      MasterUserPassword: !Sub "{{resolve:secretsmanager:${DatabaseSecretArn}:SecretString:password}}"
+      DBName: !Sub "{{resolve:secretsmanager:${DatabaseSecretArn}:SecretString:dbname}}"
+      Port: "5432"
+      PubliclyAccessible: false
+      AutoMinorVersionUpgrade: true
+      BackupRetentionPeriod: !If [IsProduction, 30, 7]
+      PreferredBackupWindow: "03:00-04:00"
+      PreferredMaintenanceWindow: "Sun:04:30-Sun:05:30"
+      CopyTagsToSnapshot: true
+      PerformanceInsightsEnabled: !If [IsProduction, true, false]
+      PerformanceInsightsRetentionPeriod: !If [IsProduction, 7, !Ref "AWS::NoValue"]
+      MonitoringInterval: !If [IsProduction, 60, 0]
+      MonitoringRoleArn: !If [HasMonitoringRole, !Ref MonitoringRoleArn, !Ref "AWS::NoValue"]
+      EnableCloudWatchLogsExports:
+        - postgresql
+        - upgrade
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-postgres"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+  DBInstanceIdentifier:
+    Description: RDS DB Instance Identifier.
+    Value: !Ref RDSInstance
+    Export:
+      Name: !Sub "${AppName}-${Environment}-DBInstanceIdentifier"
+
+  DBEndpointAddress:
+    Description: RDS PostgreSQL endpoint address for JDBC connection string.
+    Value: !GetAtt RDSInstance.Endpoint.Address
+    Export:
+      Name: !Sub "${AppName}-${Environment}-DBEndpointAddress"
+
+  DBEndpointPort:
+    Description: RDS PostgreSQL listening port.
+    Value: !GetAtt RDSInstance.Endpoint.Port
+    Export:
+      Name: !Sub "${AppName}-${Environment}-DBEndpointPort"
+
+  RDSSecurityGroupId:
+    Description: Security Group ID protecting the RDS instance.
+    Value: !Ref RDSSecurityGroup
+    Export:
+      Name: !Sub "${AppName}-${Environment}-RDSSecurityGroupId"

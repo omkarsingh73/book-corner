@@ -1,0 +1,146 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  AWS CloudFormation Template: Amazon ECR Private Repository for Book Corner API.
+  Includes automated vulnerability scanning (Amazon Inspector), image lifecycle policies,
+  tag immutability controls, and KMS encryption.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Environment Configuration"
+        Parameters:
+          - Environment
+          - AppName
+      - Label:
+          default: "ECR Security & Lifecycle Settings"
+        Parameters:
+          - TagMutability
+          - MaxUntaggedImageAgeDays
+          - MaxTaggedImagesCount
+          - KmsKeyArn
+
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Deployment target environment (dev, staging, prod).
+
+  AppName:
+    Type: String
+    Default: book-corner
+    AllowedPattern: '^[a-z0-9-]+$'
+    ConstraintDescription: Must contain only lowercase alphanumeric characters and hyphens.
+    Description: Application name identifier used in resource naming and tagging.
+
+  TagMutability:
+    Type: String
+    Default: IMMUTABLE
+    AllowedValues:
+      - IMMUTABLE
+      - MUTABLE
+    Description: >
+      Tag immutability prevents existing tags from being overwritten.
+      IMMUTABLE is strongly recommended for production and staging environments.
+
+  MaxUntaggedImageAgeDays:
+    Type: Number
+    Default: 7
+    MinValue: 1
+    MaxValue: 365
+    Description: Number of days before untagged / orphaned container images are automatically purged.
+
+  MaxTaggedImagesCount:
+    Type: Number
+    Default: 30
+    MinValue: 5
+    MaxValue: 1000
+    Description: Maximum number of recent tagged release images retained for rollback.
+
+  KmsKeyArn:
+    Type: String
+    Default: ""
+    Description: Optional KMS Key ARN for server-side encryption. If empty, AES256 managed encryption is used.
+
+Conditions:
+  UseKmsEncryption: !Not [!Equals [!Ref KmsKeyArn, ""]]
+  IsProduction: !Equals [!Ref Environment, "prod"]
+
+Resources:
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${AppName}-${Environment}-api"
+      ImageTagMutability: !Ref TagMutability
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      EncryptionConfiguration:
+        !If
+          - UseKmsEncryption
+          - EncryptionType: KMS
+            KmsKey: !Ref KmsKeyArn
+          - EncryptionType: AES256
+      LifecyclePolicy:
+        LifecyclePolicyText: !Sub |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Expire untagged images older than ${MaxUntaggedImageAgeDays} days",
+                "selection": {
+                  "tagStatus": "untagged",
+                  "countType": "sinceImagePushed",
+                  "countUnit": "days",
+                  "countNumber": ${MaxUntaggedImageAgeDays}
+                },
+                "action": {
+                  "type": "expire"
+                }
+              },
+              {
+                "rulePriority": 2,
+                "description": "Retain only latest ${MaxTaggedImagesCount} tagged release images",
+                "selection": {
+                  "tagStatus": "tagged",
+                  "tagPatternList": ["*"],
+                  "countType": "imageCountMoreThan",
+                  "countNumber": ${MaxTaggedImagesCount}
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-api-repository"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+  RepositoryArn:
+    Description: The Amazon Resource Name (ARN) of the ECR repository.
+    Value: !GetAtt ECRRepository.Arn
+    Export:
+      Name: !Sub "${AppName}-${Environment}-ECRRepositoryArn"
+
+  RepositoryUri:
+    Description: The repository URI used for tagging and pushing container images.
+    Value: !GetAtt ECRRepository.RepositoryUri
+    Export:
+      Name: !Sub "${AppName}-${Environment}-ECRRepositoryUri"
+
+  RepositoryName:
+    Description: The assigned name of the ECR repository.
+    Value: !Ref ECRRepository
+    Export:
+      Name: !Sub "${AppName}-${Environment}-ECRRepositoryName"
