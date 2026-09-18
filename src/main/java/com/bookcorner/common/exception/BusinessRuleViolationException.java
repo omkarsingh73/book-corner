@@ -4,24 +4,23 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
 /**
- * Thrown when an operation violates a domain invariant or business rule.
+ * Thrown when an operation violates a domain invariant, state machine rule,
+ * or core e-commerce business rule.
  */
 @ResponseStatus(HttpStatus.UNPROCESSABLE_ENTITY)
-public class BusinessRuleViolationException extends RuntimeException {
+public class BusinessRuleViolationException extends BaseException {
 
-    private final String errorCode;
+    public static final String DEFAULT_ERROR_CODE = "BUSINESS_RULE_VIOLATION";
 
     public BusinessRuleViolationException(String message) {
-        super(message);
-        this.errorCode = "BUSINESS_RULE_VIOLATION";
+        super(message, DEFAULT_ERROR_CODE, HttpStatus.UNPROCESSABLE_ENTITY);
     }
 
     public BusinessRuleViolationException(String errorCode, String message) {
-        super(message);
-        this.errorCode = errorCode;
+        super(message, errorCode, HttpStatus.UNPROCESSABLE_ENTITY);
     }
 
-    public String getErrorCode() {
-        return errorCode;
+    public BusinessRuleViolationException(String errorCode, String message, Throwable cause) {
+        super(message, cause, errorCode, HttpStatus.UNPROCESSABLE_ENTITY);
     }
 }

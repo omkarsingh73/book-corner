@@ -4,18 +4,18 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
 /**
- * Thrown on bad credentials, expired tokens, or invalid passwords.
+ * Thrown when a supplied JWT access or refresh token has expired.
  */
 @ResponseStatus(HttpStatus.UNAUTHORIZED)
-public class InvalidCredentialsException extends BaseException {
+public class TokenExpiredException extends BaseException {
 
-    public static final String DEFAULT_ERROR_CODE = "INVALID_CREDENTIALS";
+    public static final String DEFAULT_ERROR_CODE = "TOKEN_EXPIRED";
 
-    public InvalidCredentialsException(String message) {
+    public TokenExpiredException(String message) {
         super(message, DEFAULT_ERROR_CODE, HttpStatus.UNAUTHORIZED);
     }
 
-    public InvalidCredentialsException(String message, Throwable cause) {
+    public TokenExpiredException(String message, Throwable cause) {
         super(message, cause, DEFAULT_ERROR_CODE, HttpStatus.UNAUTHORIZED);
     }
 }
