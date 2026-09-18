@@ -355,16 +355,16 @@ public class OrderService {
                     .orElseThrow(() -> new ResourceNotFoundException("Shipping address not found: " + request.getShippingAddressId()));
             AddressDto dto = AddressDto.builder()
                     .recipientName(address.getRecipientName())
-                    .streetLine1(address.getStreetLine1())
-                    .streetLine2(address.getStreetLine2())
+                    .streetAddress1(address.getStreetAddress1())
+                    .streetAddress2(address.getStreetAddress2())
                     .city(address.getCity())
-                    .stateOrProvince(address.getStateOrProvince())
+                    .stateProvince(address.getStateProvince())
                     .postalCode(address.getPostalCode())
                     .countryCode(address.getCountryCode())
                     .phoneNumber(address.getPhoneNumber())
                     .build();
             return serializeToJson(dto);
-        } else if (request.getNewShippingAddress() != null) {
+        } else if (request.getShippingAddressId() == null && request.getNewShippingAddress() != null) {
             return serializeToJson(request.getNewShippingAddress());
         }
         throw new BusinessRuleViolationException("Shipping address is required for checkout.");
@@ -376,10 +376,10 @@ public class OrderService {
                     .orElseThrow(() -> new ResourceNotFoundException("Billing address not found: " + request.getBillingAddressId()));
             AddressDto dto = AddressDto.builder()
                     .recipientName(address.getRecipientName())
-                    .streetLine1(address.getStreetLine1())
-                    .streetLine2(address.getStreetLine2())
+                    .streetAddress1(address.getStreetAddress1())
+                    .streetAddress2(address.getStreetAddress2())
                     .city(address.getCity())
-                    .stateOrProvince(address.getStateOrProvince())
+                    .stateProvince(address.getStateProvince())
                     .postalCode(address.getPostalCode())
                     .countryCode(address.getCountryCode())
                     .phoneNumber(address.getPhoneNumber())

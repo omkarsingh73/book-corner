@@ -145,7 +145,7 @@ class OrderServiceTest {
         cart = CartEntity.builder()
                 .id(UUID.randomUUID())
                 .user(user)
-                .currencyCode("USD")
+                .storeId(UUID.randomUUID())
                 .items(new ArrayList<>())
                 .build();
 
@@ -346,7 +346,7 @@ class OrderServiceTest {
                 .orderStatus("CONFIRMED")
                 .totalAmount(8000L)
                 .lineItems(new ArrayList<>())
-                .statusTransitions(new ArrayList<>())
+                .statusHistory(new ArrayList<>())
                 .build();
 
         OrderLineItemEntity lineItem = OrderLineItemEntity.builder()

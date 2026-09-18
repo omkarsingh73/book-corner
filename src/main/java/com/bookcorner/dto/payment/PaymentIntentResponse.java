@@ -26,6 +26,7 @@ public class PaymentIntentResponse implements Serializable {
     private String clientSecret;
     private String gatewayProvider;
     private MoneyDto totalPayableAmount;
+    private String idempotencyKey;
 
     @Builder.Default
     private List<TenderSplitSummary> splits = new ArrayList<>();

@@ -36,6 +36,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -85,8 +86,8 @@ class CartControllerTest {
                         .header("X-Guest-Session-Token", "gst_session_token")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.currencyCode").isEqualTo("USD"))
-                .andExpect(jsonPath("$.subtotal.amount").isEqualTo(4500));
+                .andExpect(jsonPath("$.currencyCode").value("USD"))
+                .andExpect(jsonPath("$.subtotal.amount").value(4500));
     }
 
     @Test
@@ -113,7 +114,7 @@ class CartControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.subtotal.amount").isEqualTo(8000));
+                .andExpect(jsonPath("$.subtotal.amount").value(8000));
     }
 
     @Test
@@ -128,8 +129,8 @@ class CartControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").isEqualTo("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.invalidParams[0].name").isEqualTo("quantity"));
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.invalidParams[0].name").value("quantity"));
     }
 
     @Test
@@ -148,8 +149,8 @@ class CartControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").isEqualTo("INSUFFICIENT_STOCK"))
-                .andExpect(jsonPath("$.detail").contains("Insufficient inventory"));
+                .andExpect(jsonPath("$.code").value("INSUFFICIENT_STOCK"))
+                .andExpect(jsonPath("$.detail").value(containsString("Insufficient inventory")));
     }
 
     @Test
@@ -172,7 +173,7 @@ class CartControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.subtotal.amount").isEqualTo(9000));
+                .andExpect(jsonPath("$.subtotal.amount").value(9000));
     }
 
     @Test
@@ -205,7 +206,7 @@ class CartControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.subtotal.amount").isEqualTo(15000));
+                .andExpect(jsonPath("$.subtotal.amount").value(15000));
     }
 
     @Test
@@ -226,7 +227,7 @@ class CartControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.discount.amount").isEqualTo(1500));
+                .andExpect(jsonPath("$.discount.amount").value(1500));
     }
 
     @Test

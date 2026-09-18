@@ -24,4 +24,19 @@ public class OrderCancellationResponse implements Serializable {
     private String cancellationReason;
     private Boolean refundInitiated;
     private MoneyDto refundAmount;
+
+    public String getCancellationStatus() {
+        return orderStatus;
+    }
+
+    public void setCancellationStatus(String cancellationStatus) {
+        this.orderStatus = cancellationStatus;
+    }
+
+    public static class OrderCancellationResponseBuilder {
+        public OrderCancellationResponseBuilder cancellationStatus(String cancellationStatus) {
+            this.orderStatus = cancellationStatus;
+            return this;
+        }
+    }
 }

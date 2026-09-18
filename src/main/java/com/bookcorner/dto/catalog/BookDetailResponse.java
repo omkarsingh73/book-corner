@@ -41,6 +41,21 @@ public class BookDetailResponse implements Serializable {
 
     private RatingSummary ratingSummary;
 
+    public UUID getId() {
+        return bookId;
+    }
+
+    public void setId(UUID id) {
+        this.bookId = id;
+    }
+
+    public static class BookDetailResponseBuilder {
+        public BookDetailResponseBuilder id(UUID id) {
+            this.bookId = id;
+            return this;
+        }
+    }
+
     @Data
     @Builder
     @NoArgsConstructor

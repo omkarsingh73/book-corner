@@ -82,8 +82,8 @@ class CatalogControllerTest {
         mockMvc.perform(get("/categories")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].name").isEqualTo("Computer Science"))
-                .andExpect(jsonPath("$[0].slug").isEqualTo("computer-science"));
+                .andExpect(jsonPath("$[0].name").value("Computer Science"))
+                .andExpect(jsonPath("$[0].slug").value("computer-science"));
     }
 
     @Test
@@ -103,8 +103,8 @@ class CatalogControllerTest {
                         .param("size", "10")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].fullName").isEqualTo("Martin Fowler"))
-                .andExpect(jsonPath("$.content[0].authorSlug").isEqualTo("martin-fowler"));
+                .andExpect(jsonPath("$.content[0].fullName").value("Martin Fowler"))
+                .andExpect(jsonPath("$.content[0].authorSlug").value("martin-fowler"));
     }
 
     @Test
@@ -122,8 +122,8 @@ class CatalogControllerTest {
         mockMvc.perform(get("/authors/{authorId}", authorId)
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.fullName").isEqualTo("Robert C. Martin"))
-                .andExpect(jsonPath("$.authorSlug").isEqualTo("robert-c-martin"));
+                .andExpect(jsonPath("$.fullName").value("Robert C. Martin"))
+                .andExpect(jsonPath("$.authorSlug").value("robert-c-martin"));
     }
 
     @Test
@@ -136,7 +136,7 @@ class CatalogControllerTest {
         mockMvc.perform(get("/authors/{authorId}", authorId)
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").isEqualTo("RESOURCE_NOT_FOUND"));
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
     }
 
     @Test
@@ -159,8 +159,8 @@ class CatalogControllerTest {
                         .param("maxPrice", "5000")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].title").isEqualTo("Clean Code"))
-                .andExpect(jsonPath("$.content[0].isbn13").isEqualTo("9780132350884"));
+                .andExpect(jsonPath("$.content[0].title").value("Clean Code"))
+                .andExpect(jsonPath("$.content[0].isbn13").value("9780132350884"));
     }
 
     @Test
@@ -180,9 +180,9 @@ class CatalogControllerTest {
         mockMvc.perform(get("/books/{bookId}", bookId)
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.bookId").isEqualTo(bookId.toString()))
-                .andExpect(jsonPath("$.title").isEqualTo("Clean Code"))
-                .andExpect(jsonPath("$.isbn13").isEqualTo("9780132350884"));
+                .andExpect(jsonPath("$.bookId").value(bookId.toString()))
+                .andExpect(jsonPath("$.title").value("Clean Code"))
+                .andExpect(jsonPath("$.isbn13").value("9780132350884"));
     }
 
     @Test
@@ -195,6 +195,6 @@ class CatalogControllerTest {
         mockMvc.perform(get("/books/{bookId}", bookId)
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").isEqualTo("RESOURCE_NOT_FOUND"));
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
     }
 }

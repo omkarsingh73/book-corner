@@ -77,29 +77,41 @@ public class CatalogService {
         BookEntity book = bookRepository.findByIdWithDetails(bookId)
                 .orElseThrow(() -> new ResourceNotFoundException("Book not found with ID: " + bookId));
 
-        BookDetailResponse response = catalogMapper.toBookDetailResponse(book);
-
-        // Fetch aggregate rating metrics
+        Double avgRating = 0.0;
+        Long reviewCount = 0L;
         try {
-            Object[] ratingStats = reviewRepository.calculateRatingSummaryForBook(bookId);
-            if (ratingStats != null && ratingStats.length > 0) {
-                Object item = ratingStats[0];
-                if (item instanceof Object[] row) {
-                    Double avgRating = ((Number) row[0]).doubleValue();
-                    Integer reviewCount = ((Number) row[1]).intValue();
-                    response.setRatingSummary(new BookDetailResponse.RatingSummary(avgRating, reviewCount));
-                } else if (item instanceof Number avgNum && ratingStats.length > 1) {
-                    Double avgRating = avgNum.doubleValue();
-                    Integer reviewCount = ((Number) ratingStats[1]).intValue();
-                    response.setRatingSummary(new BookDetailResponse.RatingSummary(avgRating, reviewCount));
-                }
-            }
+            Double avg = reviewRepository.findAverageRatingByBookId(bookId);
+            Long count = reviewRepository.countByBookId(bookId);
+            if (avg != null) avgRating = avg;
+            if (count != null) reviewCount = count;
         } catch (Exception e) {
             log.warn("Unable to fetch aggregate rating metrics for book {}: {}", bookId, e.getMessage());
-            response.setRatingSummary(new BookDetailResponse.RatingSummary(0.0, 0));
         }
 
-        return response;
+        return catalogMapper.toBookDetailResponse(book, avgRating, reviewCount);
+    }
+
+    /**
+     * Retrieves book details by unique ISBN-13.
+     */
+    @Transactional(readOnly = true)
+    public BookDetailResponse getBookByIsbn(String isbn) {
+        log.info("Fetching complete book details for ISBN: {}", isbn);
+        BookEntity book = bookRepository.findByIsbn13(isbn)
+                .orElseThrow(() -> new ResourceNotFoundException("Book not found with ISBN: " + isbn));
+
+        Double avgRating = 0.0;
+        Long reviewCount = 0L;
+        try {
+            Double avg = reviewRepository.findAverageRatingByBookId(book.getId());
+            Long count = reviewRepository.countByBookId(book.getId());
+            if (avg != null) avgRating = avg;
+            if (count != null) reviewCount = count;
+        } catch (Exception e) {
+            log.warn("Unable to fetch aggregate rating metrics for book {}: {}", book.getId(), e.getMessage());
+        }
+
+        return catalogMapper.toBookDetailResponse(book, avgRating, reviewCount);
     }
 
     /**

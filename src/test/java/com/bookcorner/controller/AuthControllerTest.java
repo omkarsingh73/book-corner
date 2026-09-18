@@ -79,7 +79,7 @@ class AuthControllerTest {
                         .header("X-Store-Code", "BK_MAIN_ONLINE")
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.guestSessionToken").isEqualTo("gst_test_token_12345"))
+                .andExpect(jsonPath("$.guestSessionToken").value("gst_test_token_12345"))
                 .andExpect(jsonPath("$.expiresAt").isNotEmpty());
     }
 
@@ -106,9 +106,9 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.accessToken").isEqualTo("jwt_access_token_abc"))
-                .andExpect(jsonPath("$.refreshToken").isEqualTo("jwt_refresh_token_xyz"))
-                .andExpect(jsonPath("$.tokenType").isEqualTo("Bearer"));
+                .andExpect(jsonPath("$.accessToken").value("jwt_access_token_abc"))
+                .andExpect(jsonPath("$.refreshToken").value("jwt_refresh_token_xyz"))
+                .andExpect(jsonPath("$.tokenType").value("Bearer"));
     }
 
     @Test
@@ -125,8 +125,8 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").isEqualTo("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.invalidParams[0].name").isEqualTo("email"));
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.invalidParams[0].name").value("email"));
     }
 
     @Test
@@ -143,7 +143,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").isEqualTo("VALIDATION_FAILED"));
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
     }
 
     @Test
@@ -167,8 +167,8 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").isEqualTo("jwt_access_token_logged_in"))
-                .andExpect(jsonPath("$.refreshToken").isEqualTo("jwt_refresh_token_logged_in"));
+                .andExpect(jsonPath("$.accessToken").value("jwt_access_token_logged_in"))
+                .andExpect(jsonPath("$.refreshToken").value("jwt_refresh_token_logged_in"));
     }
 
     @Test
@@ -186,8 +186,8 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").isEqualTo("INVALID_CREDENTIALS"))
-                .andExpect(jsonPath("$.detail").isEqualTo("Invalid email or password."));
+                .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"))
+                .andExpect(jsonPath("$.detail").value("Invalid email or password."));
     }
 
     @Test
@@ -210,8 +210,8 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").isEqualTo("new_access_token"))
-                .andExpect(jsonPath("$.refreshToken").isEqualTo("new_refresh_token"));
+                .andExpect(jsonPath("$.accessToken").value("new_access_token"))
+                .andExpect(jsonPath("$.refreshToken").value("new_refresh_token"));
     }
 
     @Test

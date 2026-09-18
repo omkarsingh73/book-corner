@@ -22,6 +22,13 @@ public interface CategoryRepository extends JpaRepository<CategoryEntity, UUID> 
     Optional<CategoryEntity> findByCategorySlug(String categorySlug);
 
     /**
+     * Alias for findByCategorySlug.
+     */
+    default Optional<CategoryEntity> findBySlug(String slug) {
+        return findByCategorySlug(slug);
+    }
+
+    /**
      * Retrieve all top-level root categories (parent_id IS NULL).
      */
     List<CategoryEntity> findByParentIsNullOrderByDisplayOrderAsc();

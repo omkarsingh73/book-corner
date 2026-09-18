@@ -42,6 +42,12 @@ public interface ReviewRepository extends JpaRepository<ReviewEntity, UUID>, Jpa
         """)
     Object[] calculateRatingSummaryForBook(@Param("bookId") UUID bookId);
 
+    @Query("SELECT COALESCE(AVG(r.ratingStars), 0.0) FROM ReviewEntity r WHERE r.book.id = :bookId AND r.moderationStatus = 'APPROVED'")
+    Double findAverageRatingByBookId(@Param("bookId") UUID bookId);
+
+    @Query("SELECT COUNT(r) FROM ReviewEntity r WHERE r.book.id = :bookId AND r.moderationStatus = 'APPROVED'")
+    Long countByBookId(@Param("bookId") UUID bookId);
+
     /**
      * Atomically increment the helpful vote count of a review.
      */

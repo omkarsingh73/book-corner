@@ -131,8 +131,8 @@ class OrderWorkflowIntegrationTest extends AbstractIntegrationTest {
         // 3. Category
         category = categoryRepository.findBySlug("distributed-systems-saga")
                 .orElseGet(() -> categoryRepository.save(CategoryEntity.builder()
-                        .name("Distributed Systems")
-                        .slug("distributed-systems-saga")
+                        .categoryName("Distributed Systems")
+                        .categorySlug("distributed-systems-saga")
                         .displayOrder(1)
                         .build()));
 
@@ -167,7 +167,7 @@ class OrderWorkflowIntegrationTest extends AbstractIntegrationTest {
                     .formatType("PAPERBACK")
                     .basePriceAmount(4500L) // $45.00
                     .currencyCode("USD")
-                    .inventoryQuantity(10) // 10 copies in stock
+                    .stockQuantity(10) // 10 copies in stock
                     .build();
             newBook.addFormat(newFormat);
 

@@ -28,6 +28,7 @@ public class CartResponse implements Serializable {
     private MoneyDto total;
     private String couponCode;
     private Integer totalQuantity;
+    private String currencyCode;
 
     @Builder.Default
     private List<CartLineItemDto> items = new ArrayList<>();

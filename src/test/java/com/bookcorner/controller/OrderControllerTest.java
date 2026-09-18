@@ -103,8 +103,8 @@ class OrderControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.orderNumber").isEqualTo("ORD-20260918-9999"))
-                .andExpect(jsonPath("$.orderStatus").isEqualTo("CONFIRMED"));
+                .andExpect(jsonPath("$.orderNumber").value("ORD-20260918-9999"))
+                .andExpect(jsonPath("$.orderStatus").value("CONFIRMED"));
     }
 
     @Test
@@ -118,7 +118,7 @@ class OrderControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").isEqualTo("FORBIDDEN"));
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
     }
 
     @Test
@@ -133,8 +133,8 @@ class OrderControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").isEqualTo("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.invalidParams[0].name").isEqualTo("paymentMethodToken"));
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.invalidParams[0].name").value("paymentMethodToken"));
     }
 
     @Test
@@ -152,7 +152,7 @@ class OrderControllerTest {
         mockMvc.perform(get("/orders")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].orderNumber").isEqualTo("ORD-1"));
+                .andExpect(jsonPath("$.content[0].orderNumber").value("ORD-1"));
     }
 
     @Test
@@ -169,8 +169,8 @@ class OrderControllerTest {
         mockMvc.perform(get("/orders/ORD-1001")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.orderNumber").isEqualTo("ORD-1001"))
-                .andExpect(jsonPath("$.orderStatus").isEqualTo("DELIVERED"));
+                .andExpect(jsonPath("$.orderNumber").value("ORD-1001"))
+                .andExpect(jsonPath("$.orderStatus").value("DELIVERED"));
     }
 
     @Test
@@ -183,7 +183,7 @@ class OrderControllerTest {
         mockMvc.perform(get("/orders/ORD-MISSING")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").isEqualTo("RESOURCE_NOT_FOUND"));
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
     }
 
     @Test
@@ -207,9 +207,9 @@ class OrderControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.orderNumber").isEqualTo("ORD-CANCEL-1"))
-                .andExpect(jsonPath("$.cancellationStatus").isEqualTo("CANCELLED"))
-                .andExpect(jsonPath("$.refundInitiated").isEqualTo(true));
+                .andExpect(jsonPath("$.orderNumber").value("ORD-CANCEL-1"))
+                .andExpect(jsonPath("$.cancellationStatus").value("CANCELLED"))
+                .andExpect(jsonPath("$.refundInitiated").value(true));
     }
 
     @Test
@@ -240,8 +240,8 @@ class OrderControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.rmaNumber").isEqualTo("RMA-20260918-001"))
-                .andExpect(jsonPath("$.rmaStatus").isEqualTo("REQUESTED"))
-                .andExpect(jsonPath("$.returnCarrier").isEqualTo("UPS"));
+                .andExpect(jsonPath("$.rmaNumber").value("RMA-20260918-001"))
+                .andExpect(jsonPath("$.rmaStatus").value("REQUESTED"))
+                .andExpect(jsonPath("$.returnCarrier").value("UPS"));
     }
 }

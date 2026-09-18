@@ -79,7 +79,7 @@ class AuthServiceTest {
         customerRole = RoleEntity.builder()
                 .id(UUID.randomUUID())
                 .roleCode("ROLE_CUSTOMER")
-                .roleName("Customer")
+                .description("Customer")
                 .build();
 
         testUser = UserEntity.builder()

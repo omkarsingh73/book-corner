@@ -81,7 +81,7 @@ class CatalogServiceTest {
                 .subtitle("A Handbook of Agile Software Craftsmanship")
                 .publisher(publisher)
                 .primaryCategory(category)
-                .language("en")
+                .primaryLanguage("en")
                 .publicationDate(LocalDate.of(2008, 8, 1))
                 .formats(new ArrayList<>())
                 .bookAuthors(new ArrayList<>())

@@ -52,14 +52,13 @@ class OrderRepositoryTest extends AbstractPostgresRepositoryTest {
         store = storeRepository.save(StoreEntity.builder()
                 .storeCode("BK_MAIN_ONLINE")
                 .storeName("Book Corner Online")
-                .currencyCode("USD")
-                .locale("en_US")
+                .defaultCurrency("USD")
                 .build());
 
         order = orderRepository.save(OrderEntity.builder()
                 .orderNumber("ORD-20260918-A8F2")
                 .user(customer)
-                .store(store)
+                .storeId(store.getId())
                 .orderStatus("CONFIRMED")
                 .subtotalAmount(4499L)
                 .discountAmount(0L)

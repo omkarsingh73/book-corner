@@ -61,4 +61,45 @@ public class AddressDto implements Serializable {
 
     @Size(max = 500, message = "Delivery instructions cannot exceed 500 characters")
     private String deliveryInstructions;
+
+    public String getStreetLine1() {
+        return streetAddress1;
+    }
+
+    public void setStreetLine1(String streetLine1) {
+        this.streetAddress1 = streetLine1;
+    }
+
+    public String getStreetLine2() {
+        return streetAddress2;
+    }
+
+    public void setStreetLine2(String streetLine2) {
+        this.streetAddress2 = streetLine2;
+    }
+
+    public String getStateOrProvince() {
+        return stateProvince;
+    }
+
+    public void setStateOrProvince(String stateOrProvince) {
+        this.stateProvince = stateOrProvince;
+    }
+
+    public static class AddressDtoBuilder {
+        public AddressDtoBuilder streetLine1(String streetLine1) {
+            this.streetAddress1 = streetLine1;
+            return this;
+        }
+
+        public AddressDtoBuilder streetLine2(String streetLine2) {
+            this.streetAddress2 = streetLine2;
+            return this;
+        }
+
+        public AddressDtoBuilder stateOrProvince(String stateOrProvince) {
+            this.stateProvince = stateOrProvince;
+            return this;
+        }
+    }
 }

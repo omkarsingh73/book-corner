@@ -39,7 +39,6 @@ class UserRepositoryTest extends AbstractPostgresRepositoryTest {
 
         customerRole = roleRepository.save(RoleEntity.builder()
                 .roleCode("ROLE_CUSTOMER")
-                .roleName("Customer")
                 .description("Registered Customer Role")
                 .build());
 
@@ -112,7 +111,7 @@ class UserRepositoryTest extends AbstractPostgresRepositoryTest {
     @Test
     @DisplayName("Should enforce soft-delete filter and ignore deleted users in queries")
     void shouldFilterSoftDeletedUsers() {
-        testUser.setIsDeleted(true);
+        testUser.setDeleted(true);
         testUser.setDeletedAt(Instant.now());
         userRepository.save(testUser);
 

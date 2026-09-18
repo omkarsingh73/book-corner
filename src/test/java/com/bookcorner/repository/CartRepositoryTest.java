@@ -58,8 +58,7 @@ class CartRepositoryTest extends AbstractPostgresRepositoryTest {
         store = storeRepository.save(StoreEntity.builder()
                 .storeCode("BK_MAIN_ONLINE")
                 .storeName("Book Corner Online")
-                .currencyCode("USD")
-                .locale("en_US")
+                .defaultCurrency("USD")
                 .build());
 
         guestSession = guestSessionRepository.save(GuestSessionEntity.builder()
@@ -73,8 +72,7 @@ class CartRepositoryTest extends AbstractPostgresRepositoryTest {
     void shouldFindCartByUserId() {
         CartEntity cart = cartRepository.save(CartEntity.builder()
                 .user(user)
-                .store(store)
-                .currencyCode("USD")
+                .storeId(store.getId())
                 .expiresAt(Instant.now().plus(7, ChronoUnit.DAYS))
                 .items(new ArrayList<>())
                 .build());
@@ -91,8 +89,7 @@ class CartRepositoryTest extends AbstractPostgresRepositoryTest {
     void shouldFindCartByGuestSessionToken() {
         CartEntity guestCart = cartRepository.save(CartEntity.builder()
                 .guestSession(guestSession)
-                .store(store)
-                .currencyCode("USD")
+                .storeId(store.getId())
                 .expiresAt(Instant.now().plus(7, ChronoUnit.DAYS))
                 .items(new ArrayList<>())
                 .build());
@@ -112,8 +109,7 @@ class CartRepositoryTest extends AbstractPostgresRepositoryTest {
 
         cartRepository.save(CartEntity.builder()
                 .user(user)
-                .store(store)
-                .currencyCode("USD")
+                .storeId(store.getId())
                 .expiresAt(Instant.now().plus(7, ChronoUnit.DAYS))
                 .items(new ArrayList<>())
                 .build());
@@ -127,8 +123,7 @@ class CartRepositoryTest extends AbstractPostgresRepositoryTest {
     void shouldDeleteExpiredCarts() {
         cartRepository.save(CartEntity.builder()
                 .user(user)
-                .store(store)
-                .currencyCode("USD")
+                .storeId(store.getId())
                 .expiresAt(Instant.now().minus(2, ChronoUnit.DAYS)) // Expired
                 .items(new ArrayList<>())
                 .build());

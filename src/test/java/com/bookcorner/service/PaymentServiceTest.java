@@ -85,7 +85,6 @@ class PaymentServiceTest {
                 .totalAmount(5000L) // $50.00
                 .currencyCode("USD")
                 .orderStatus("PENDING_PAYMENT")
-                .tenderSplits(new ArrayList<>())
                 .build();
     }
 

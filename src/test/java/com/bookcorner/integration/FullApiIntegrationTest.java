@@ -34,6 +34,7 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -96,8 +97,8 @@ class FullApiIntegrationTest extends AbstractIntegrationTest {
 
         if (categoryRepository.findBySlug("software-engineering").isEmpty()) {
             category = categoryRepository.save(CategoryEntity.builder()
-                    .name("Software Engineering")
-                    .slug("software-engineering")
+                    .categoryName("Software Engineering")
+                    .categorySlug("software-engineering")
                     .displayOrder(1)
                     .build());
         } else {
@@ -135,7 +136,7 @@ class FullApiIntegrationTest extends AbstractIntegrationTest {
                     .formatType("PAPERBACK")
                     .basePriceAmount(4999L)
                     .currencyCode("USD")
-                    .inventoryQuantity(25)
+                    .stockQuantity(25)
                     .build();
             book.addFormat(format);
 
@@ -167,7 +168,7 @@ class FullApiIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.accessToken").isNotEmpty())
                 .andExpect(jsonPath("$.refreshToken").isNotEmpty())
-                .andExpect(jsonPath("$.tokenType").isEqualTo("Bearer"))
+                .andExpect(jsonPath("$.tokenType").value("Bearer"))
                 .andReturn();
 
         AuthTokenResponse regTokens = objectMapper.readValue(
@@ -235,7 +236,7 @@ class FullApiIntegrationTest extends AbstractIntegrationTest {
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].isbn13").value("9780134757599"))
-                .andExpect(jsonPath("$.content[0].title").contains("Refactoring"));
+                .andExpect(jsonPath("$.content[0].title").value(containsString("Refactoring")));
 
         // 3. Get Book Details by ID
         mockMvc.perform(get("/books/{bookId}", book.getId())

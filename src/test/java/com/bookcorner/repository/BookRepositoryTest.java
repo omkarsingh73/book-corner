@@ -65,7 +65,7 @@ class BookRepositoryTest extends AbstractPostgresRepositoryTest {
         testCategory = categoryRepository.save(CategoryEntity.builder()
                 .categoryName("Computer Science")
                 .categorySlug("computer-science")
-                .treeLevel(0)
+                .categoryLevel(1)
                 .displayOrder(1)
                 .build());
 
@@ -77,12 +77,11 @@ class BookRepositoryTest extends AbstractPostgresRepositoryTest {
 
         testBook = BookEntity.builder()
                 .isbn13("9781449373320")
-                .isbn10("1449373321")
                 .title("Designing Data-Intensive Applications")
                 .subtitle("The Big Ideas Behind Reliable, Scalable, and Maintainable Systems")
                 .publisher(testPublisher)
                 .primaryCategory(testCategory)
-                .language("en")
+                .primaryLanguage("en")
                 .publicationDate(LocalDate.of(2017, 3, 16))
                 .pageCount(616)
                 .synopsis("Comprehensive guide to data architecture.")
@@ -93,11 +92,10 @@ class BookRepositoryTest extends AbstractPostgresRepositoryTest {
         testBook = bookRepository.save(testBook);
 
         BookAuthorEntity bookAuthor = BookAuthorEntity.builder()
-                .id(new BookAuthorEntity.BookAuthorId(testBook.getId(), testAuthor.getId()))
                 .book(testBook)
                 .author(testAuthor)
                 .contributionRole("AUTHOR")
-                .authorSequence(1)
+                .authorOrder(1)
                 .build();
         testBook.getBookAuthors().add(bookAuthor);
         bookRepository.save(testBook);

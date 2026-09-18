@@ -4,6 +4,7 @@ import com.bookcorner.entity.member.RoleEntity;
 import com.bookcorner.entity.member.UserEntity;
 import com.bookcorner.repository.member.RoleRepository;
 import com.bookcorner.repository.member.UserRepository;
+import com.bookcorner.security.JwtProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,6 +28,9 @@ class SecurityIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private RoleRepository roleRepository;
+
+    @Autowired
+    private JwtProvider jwtProvider;
 
     private UserEntity customerUser;
     private UserEntity adminUser;

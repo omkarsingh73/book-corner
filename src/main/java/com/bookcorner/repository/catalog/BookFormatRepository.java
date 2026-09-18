@@ -48,10 +48,10 @@ public interface BookFormatRepository extends JpaRepository<BookFormatEntity, UU
     @Modifying
     @Query("""
         UPDATE BookFormatEntity bf 
-        SET bf.inventoryQuantity = bf.inventoryQuantity - :quantity,
+        SET bf.stockQuantity = bf.stockQuantity - :quantity,
             bf.version = bf.version + 1
         WHERE bf.id = :formatId 
-          AND bf.inventoryQuantity >= :quantity
+          AND bf.stockQuantity >= :quantity
         """)
     int decrementInventory(@Param("formatId") UUID formatId, @Param("quantity") int quantity);
 
@@ -61,7 +61,7 @@ public interface BookFormatRepository extends JpaRepository<BookFormatEntity, UU
     @Modifying
     @Query("""
         UPDATE BookFormatEntity bf 
-        SET bf.inventoryQuantity = bf.inventoryQuantity + :quantity,
+        SET bf.stockQuantity = bf.stockQuantity + :quantity,
             bf.version = bf.version + 1
         WHERE bf.id = :formatId
         """)

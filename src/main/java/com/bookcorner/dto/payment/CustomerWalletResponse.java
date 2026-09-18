@@ -23,7 +23,15 @@ public class CustomerWalletResponse implements Serializable {
 
     private UUID walletId;
     private MoneyDto currentBalance;
+    private String currencyCode;
     private Boolean isLocked;
+
+    public String getCurrencyCode() {
+        if (currencyCode != null) {
+            return currencyCode;
+        }
+        return currentBalance != null ? currentBalance.getCurrency() : null;
+    }
 
     @Builder.Default
     private List<LedgerEntrySummary> recentEntries = new ArrayList<>();

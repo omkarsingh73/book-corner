@@ -51,6 +51,14 @@ public interface CatalogMapper {
     @Mapping(target = "ratingSummary", ignore = true)
     BookDetailResponse toBookDetailResponse(BookEntity entity);
 
+    default BookDetailResponse toBookDetailResponse(BookEntity entity, double averageRating, long reviewCount) {
+        BookDetailResponse response = toBookDetailResponse(entity);
+        if (response != null) {
+            response.setRatingSummary(new BookDetailResponse.RatingSummary(averageRating, (int) reviewCount));
+        }
+        return response;
+    }
+
     // --- Author Mapping ---
     @Mapping(target = "authorId", source = "id")
     AuthorDto toAuthorDto(AuthorEntity entity);

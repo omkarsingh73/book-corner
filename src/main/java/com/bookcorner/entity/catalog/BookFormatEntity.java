@@ -54,7 +54,26 @@ public class BookFormatEntity extends BaseAuditEntity {
     @Column(name = "weight_grams")
     private Integer weightGrams;
 
-    @Column(name = "inventory_quantity", nullable = false)
+    @Column(name = "stock_quantity", nullable = false)
     @Builder.Default
-    private int inventoryQuantity = 0;
+    private int stockQuantity = 0;
+
+    public int getInventoryQuantity() {
+        return this.stockQuantity;
+    }
+
+    public void setInventoryQuantity(int inventoryQuantity) {
+        this.stockQuantity = inventoryQuantity;
+    }
+
+    /**
+     * Checks whether this book format is active (not soft-deleted).
+     */
+    public boolean isActive() {
+        return !isDeleted();
+    }
+
+    public void setActive(boolean active) {
+        setDeleted(!active);
+    }
 }

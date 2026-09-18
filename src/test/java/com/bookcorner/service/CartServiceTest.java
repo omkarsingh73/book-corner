@@ -95,7 +95,7 @@ class CartServiceTest {
                 .id(UUID.randomUUID())
                 .storeCode("BK_MAIN_ONLINE")
                 .storeName("Book Corner Online")
-                .currencyCode("USD")
+                .defaultCurrency("USD")
                 .build();
 
         book = BookEntity.builder()
@@ -117,8 +117,7 @@ class CartServiceTest {
         cart = CartEntity.builder()
                 .id(UUID.randomUUID())
                 .user(user)
-                .store(store)
-                .currencyCode("USD")
+                .storeId(store.getId())
                 .expiresAt(Instant.now().plus(7, ChronoUnit.DAYS))
                 .items(new ArrayList<>())
                 .build();
@@ -212,7 +211,7 @@ class CartServiceTest {
     void shouldMergeGuestCartSuccessfully() {
         CartEntity guestCart = CartEntity.builder()
                 .id(UUID.randomUUID())
-                .currencyCode("USD")
+                .storeId(store.getId())
                 .items(new ArrayList<>())
                 .build();
 

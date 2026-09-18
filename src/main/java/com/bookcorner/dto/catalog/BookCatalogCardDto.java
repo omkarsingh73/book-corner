@@ -36,6 +36,34 @@ public class BookCatalogCardDto implements Serializable {
     @Builder.Default
     private List<BookFormatSummary> availableFormats = new ArrayList<>();
 
+    public UUID getId() {
+        return bookId;
+    }
+
+    public void setId(UUID id) {
+        this.bookId = id;
+    }
+
+    public String getPrimaryAuthorName() {
+        return (authors != null && !authors.isEmpty()) ? authors.get(0).getName() : null;
+    }
+
+    public static class BookCatalogCardDtoBuilder {
+        public BookCatalogCardDtoBuilder id(UUID id) {
+            this.bookId = id;
+            return this;
+        }
+
+        public BookCatalogCardDtoBuilder primaryAuthorName(String primaryAuthorName) {
+            if (this.authors$value == null) {
+                this.authors$value = new ArrayList<>();
+                this.authors$set = true;
+            }
+            this.authors$value.add(AuthorSummary.builder().name(primaryAuthorName).build());
+            return this;
+        }
+    }
+
     @Data
     @Builder
     @NoArgsConstructor
