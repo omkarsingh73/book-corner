@@ -1,0 +1,2650 @@
+openapi: 3.1.0
+info:
+  title: Book Corner REST API
+  description: |
+    Production-grade OpenAPI 3.1.0 specification for the **Book Corner** online bookstore platform.
+    Reverse-engineered from architectural wireframes, DDD domain models, and normalized PostgreSQL schemas.
+  version: 1.0.0
+  contact:
+    name: Book Corner Architecture Team
+    email: api-support@bookcorner.com
+    url: https://bookcorner.com/developer
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: https://api.bookcorner.com/api/v1
+    description: Production API Gateway
+  - url: https://api.staging.bookcorner.com/api/v1
+    description: Staging / Sandbox Environment
+
+tags:
+  - name: Authentication
+    description: Guest session management, credential authentication, JWT token issuance and rotation.
+  - name: Users
+    description: Customer profiles, address book management, and account preferences.
+  - name: Catalog
+    description: Product master books, format SKUs, publishers, authors, and hierarchical categories.
+  - name: Search
+    description: Typo-tolerant full-text search with faceted navigation and auto-complete suggestions.
+  - name: Wishlist
+    description: Customer book wishlists and price alert subscriptions.
+  - name: Cart
+    description: Shopping basket lifecycle, guest cart carryover, item quantity mutations, and discounts.
+  - name: Orders
+    description: Checkout orchestration saga, customer order history, self-service cancellations, and RMAs.
+  - name: Payments
+    description: Payment gateway integration, multi-tender split calculation, digital wallet ledger, and webhooks.
+  - name: Shipping
+    description: Real-time dynamic freight calculation, delivery ETA estimation, and consignment tracking.
+  - name: Reviews
+    description: Customer ratings (1-5 stars), verified purchase written reviews, and helpfulness voting.
+  - name: Recommendations
+    description: Personalized carousels, automated Up-Sell collector editions, and Cross-Sell companion titles.
+
+paths:
+  # ============================================================================
+  # AUTHENTICATION APIS
+  # ============================================================================
+  /auth/guest-session:
+    post:
+      tags:
+        - Authentication
+      summary: Initialize an anonymous guest session
+      operationId: startGuestSession
+      description: Issues a cryptographically signed guest session token to track temporary baskets and preferences.
+      parameters:
+        - $ref: '#/components/parameters/StoreCodeHeader'
+      responses:
+        '201':
+          description: Guest session created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestSessionResponse'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new customer account
+      operationId: registerCustomer
+      description: Creates a new user profile, optionally merges an existing guest session, and returns JWT tokens.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '500':
+          $ref: '#/components/responses/Error500'
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Authenticate user credentials
+      operationId: loginUser
+      description: Validates email and password, issuing access and refresh JWTs upon successful authentication.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authentication successful.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Rotate refresh token
+      operationId: refreshToken
+      description: Exchanges an unexpired refresh token for a newly rotated access and refresh token pair.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Tokens refreshed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRotationResponse'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: Invalidate user session
+      operationId: logoutUser
+      security:
+        - BearerAuth: []
+      description: Revokes the supplied refresh token and blacklists the current JWT access token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Logged out successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericMessageResponse'
+        '401':
+          $ref: '#/components/responses/Error401'
+
+  # ============================================================================
+  # USERS APIS
+  # ============================================================================
+  /users/me:
+    get:
+      tags:
+        - Users
+      summary: Retrieve current authenticated user profile
+      operationId: getCurrentUserProfile
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User profile retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '404':
+          $ref: '#/components/responses/Error404'
+    patch:
+      tags:
+        - Users
+      summary: Update user profile
+      operationId: updateUserProfile
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserProfileRequest'
+      responses:
+        '200':
+          description: Profile updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '409':
+          $ref: '#/components/responses/Error409'
+
+  /users/me/addresses:
+    get:
+      tags:
+        - Users
+      summary: List user saved addresses
+      operationId: listUserAddresses
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Saved addresses retrieved.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AddressDto'
+        '401':
+          $ref: '#/components/responses/Error401'
+    post:
+      tags:
+        - Users
+      summary: Add an address to address book
+      operationId: createUserAddress
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAddressRequest'
+      responses:
+        '201':
+          description: Address created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressDto'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+
+  /users/me/addresses/{addressId}:
+    delete:
+      tags:
+        - Users
+      summary: Delete address from address book
+      operationId: deleteUserAddress
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: addressId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Address deleted successfully.
+        '401':
+          $ref: '#/components/responses/Error401'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  # ============================================================================
+  # CATALOG APIS
+  # ============================================================================
+  /categories:
+    get:
+      tags:
+        - Catalog
+      summary: Retrieve complete hierarchical category tree
+      operationId: listCategories
+      responses:
+        '200':
+          description: Hierarchical category tree retrieved.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CategoryNodeDto'
+        '500':
+          $ref: '#/components/responses/Error500'
+
+  /authors:
+    get:
+      tags:
+        - Catalog
+      summary: List authors with pagination and search
+      operationId: listAuthors
+      parameters:
+        - $ref: '#/components/parameters/PageQuery'
+        - $ref: '#/components/parameters/SizeQuery'
+        - name: query
+          in: query
+          description: Author name search filter
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated author list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorListResponse'
+        '400':
+          $ref: '#/components/responses/Error400'
+
+  /authors/{authorId}:
+    get:
+      tags:
+        - Catalog
+      summary: Retrieve author profile and bibliography
+      operationId: getAuthorById
+      parameters:
+        - name: authorId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Author profile retrieved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorDetailResponse'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  /publishers:
+    get:
+      tags:
+        - Catalog
+      summary: List book publishers
+      operationId: listPublishers
+      parameters:
+        - $ref: '#/components/parameters/PageQuery'
+        - $ref: '#/components/parameters/SizeQuery'
+      responses:
+        '200':
+          description: Publisher directory.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublisherListResponse'
+
+  /books:
+    get:
+      tags:
+        - Catalog
+      summary: Browse and filter books catalog
+      operationId: browseBooks
+      security:
+        - {}
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StoreCodeHeader'
+        - name: categorySlug
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: authorSlug
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: formatType
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [PAPERBACK, HARDCOVER, EBOOK, AUDIOBOOK]
+        - name: minPrice
+          in: query
+          description: Minimum price in smallest currency unit (cents)
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+        - name: maxPrice
+          in: query
+          description: Maximum price in smallest currency unit (cents)
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+        - name: minRating
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [POPULARITY, PRICE_ASC, PRICE_DESC, NEWEST, RATING]
+            default: POPULARITY
+        - $ref: '#/components/parameters/PageQuery'
+        - $ref: '#/components/parameters/SizeQuery'
+      responses:
+        '200':
+          description: Filtered book listing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookCatalogListingResponse'
+        '400':
+          $ref: '#/components/responses/Error400'
+
+  /books/{bookId}:
+    get:
+      tags:
+        - Catalog
+      summary: Get comprehensive book details
+      operationId: getBookDetails
+      security:
+        - {}
+        - BearerAuth: []
+      parameters:
+        - name: bookId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/StoreCodeHeader'
+      responses:
+        '200':
+          description: Detailed book specifications.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookDetailResponse'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  # ============================================================================
+  # SEARCH APIS
+  # ============================================================================
+  /search:
+    get:
+      tags:
+        - Search
+      summary: Multi-faceted full-text search
+      operationId: searchCatalog
+      parameters:
+        - name: q
+          in: query
+          description: Full-text search keyword query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 200
+        - name: categoryId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: format
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [PAPERBACK, HARDCOVER, EBOOK, AUDIOBOOK]
+        - $ref: '#/components/parameters/PageQuery'
+        - $ref: '#/components/parameters/SizeQuery'
+      responses:
+        '200':
+          description: Faceted search results.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResultResponse'
+        '400':
+          $ref: '#/components/responses/Error400'
+
+  /search/suggestions:
+    get:
+      tags:
+        - Search
+      summary: Auto-complete typeahead suggestions
+      operationId: getSearchSuggestions
+      parameters:
+        - name: prefix
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 5
+            maximum: 20
+      responses:
+        '200':
+          description: Search suggestions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SearchSuggestionDto'
+        '400':
+          $ref: '#/components/responses/Error400'
+
+  # ============================================================================
+  # WISHLIST APIS
+  # ============================================================================
+  /wishlists:
+    get:
+      tags:
+        - Wishlist
+      summary: Retrieve authenticated customer wishlist
+      operationId: getWishlist
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Customer wishlist retrieved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WishlistResponse'
+        '401':
+          $ref: '#/components/responses/Error401'
+
+  /wishlists/items:
+    post:
+      tags:
+        - Wishlist
+      summary: Add book to wishlist
+      operationId: addWishlistItem
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddWishlistItemRequest'
+      responses:
+        '201':
+          description: Item added to wishlist.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WishlistItemDto'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+
+  /wishlists/items/{bookId}:
+    delete:
+      tags:
+        - Wishlist
+      summary: Remove book from wishlist
+      operationId: removeWishlistItem
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bookId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Item removed from wishlist.
+        '401':
+          $ref: '#/components/responses/Error401'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  # ============================================================================
+  # CART APIS
+  # ============================================================================
+  /cart:
+    get:
+      tags:
+        - Cart
+      summary: Retrieve active shopping cart
+      operationId: getActiveCart
+      security:
+        - {}
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/GuestSessionHeader'
+        - $ref: '#/components/parameters/StoreCodeHeader'
+      responses:
+        '200':
+          description: Active cart details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartResponse'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  /cart/items:
+    post:
+      tags:
+        - Cart
+      summary: Add format SKU item to cart
+      operationId: addItemToCart
+      security:
+        - {}
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/GuestSessionHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddCartItemRequest'
+      responses:
+        '200':
+          description: Item added successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartMutationResponse'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '422':
+          $ref: '#/components/responses/Error422'
+
+  /cart/items/{formatId}:
+    patch:
+      tags:
+        - Cart
+      summary: Mutate cart item quantity
+      operationId: updateCartItemQuantity
+      security:
+        - {}
+        - BearerAuth: []
+      parameters:
+        - name: formatId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/GuestSessionHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCartItemQuantityRequest'
+      responses:
+        '200':
+          description: Cart updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartMutationResponse'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+    delete:
+      tags:
+        - Cart
+      summary: Remove item from cart
+      operationId: removeCartItem
+      security:
+        - {}
+        - BearerAuth: []
+      parameters:
+        - name: formatId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/GuestSessionHeader'
+      responses:
+        '204':
+          description: Item deleted.
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  /cart/merge:
+    post:
+      tags:
+        - Cart
+      summary: Synchronize guest cart into authenticated user cart
+      operationId: mergeGuestCart
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MergeCartRequest'
+      responses:
+        '200':
+          description: Carts merged successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartMutationResponse'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+
+  /cart/coupon:
+    post:
+      tags:
+        - Cart
+      summary: Apply promotional coupon code to active cart
+      operationId: applyCartCoupon
+      security:
+        - {}
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/GuestSessionHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyCouponRequest'
+      responses:
+        '200':
+          description: Coupon applied successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartMutationResponse'
+        '400':
+          $ref: '#/components/responses/Error400'
+    delete:
+      tags:
+        - Cart
+      summary: Remove coupon from cart
+      operationId: removeCartCoupon
+      security:
+        - {}
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/GuestSessionHeader'
+      responses:
+        '200':
+          description: Coupon removed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartMutationResponse'
+
+  # ============================================================================
+  # ORDERS APIS
+  # ============================================================================
+  /orders/checkout:
+    post:
+      tags:
+        - Orders
+      summary: Submit checkout and place order
+      operationId: submitOrderCheckout
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutOrderRequest'
+      responses:
+        '201':
+          description: Order placed and confirmed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderConfirmationResponse'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '402':
+          description: Payment declined or authorization failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          $ref: '#/components/responses/Error409'
+
+  /orders:
+    get:
+      tags:
+        - Orders
+      summary: List customer order history
+      operationId: listOrders
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageQuery'
+        - $ref: '#/components/parameters/SizeQuery'
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [DRAFT, PENDING_PAYMENT, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, CANCELLED, RETURNED]
+      responses:
+        '200':
+          description: Order history retrieved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderHistoryResponse'
+        '401':
+          $ref: '#/components/responses/Error401'
+
+  /orders/{orderNumber}:
+    get:
+      tags:
+        - Orders
+      summary: Retrieve detailed order specifications and invoice
+      operationId: getOrderByNumber
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orderNumber
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Detailed order record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDetailResponse'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  /orders/{orderNumber}/cancel:
+    post:
+      tags:
+        - Orders
+      summary: Cancel order within policy grace period
+      operationId: cancelOrder
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orderNumber
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelOrderRequest'
+      responses:
+        '200':
+          description: Order cancelled and refund initiated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderCancellationResponse'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '409':
+          $ref: '#/components/responses/Error409'
+
+  /orders/{orderNumber}/returns:
+    post:
+      tags:
+        - Orders
+      summary: Initiate Return Merchandise Authorization (RMA)
+      operationId: requestOrderReturn
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orderNumber
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReturnRequest'
+      responses:
+        '201':
+          description: Return authorized and label issued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReturnAuthorizationResponse'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  # ============================================================================
+  # PAYMENTS APIS
+  # ============================================================================
+  /payments/intent:
+    post:
+      tags:
+        - Payments
+      summary: Create payment intent with multi-tender split
+      operationId: createPaymentIntent
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentIntentRequest'
+      responses:
+        '200':
+          description: Payment intent coordinated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentIntentResponse'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  /payments/webhooks/{provider}:
+    post:
+      tags:
+        - Payments
+      summary: Gateway webhook callback listener
+      operationId: ingestPaymentWebhook
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [stripe, razorpay, adyen]
+        - name: Stripe-Signature
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook received.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  received:
+                    type: boolean
+                    example: true
+        '400':
+          $ref: '#/components/responses/Error400'
+
+  /payments/wallet:
+    get:
+      tags:
+        - Payments
+      summary: Retrieve digital wallet balance and ledger history
+      operationId: getCustomerWallet
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Customer wallet summary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerWalletResponse'
+        '401':
+          $ref: '#/components/responses/Error401'
+
+  # ============================================================================
+  # SHIPPING APIS
+  # ============================================================================
+  /shipping/rates:
+    post:
+      tags:
+        - Shipping
+      summary: Calculate dynamic carrier shipping rates and ETA
+      operationId: calculateShippingRates
+      parameters:
+        - $ref: '#/components/parameters/StoreCodeHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShippingRateCalculationRequest'
+      responses:
+        '200':
+          description: Carrier rate options.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ShippingRateOptionDto'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  /shipping/consignments/{trackingNumber}:
+    get:
+      tags:
+        - Shipping
+      summary: Track carrier consignment milestones
+      operationId: trackConsignment
+      parameters:
+        - name: trackingNumber
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Consignment tracking timeline.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsignmentTrackingResponse'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  # ============================================================================
+  # REVIEWS APIS
+  # ============================================================================
+  /books/{bookId}/reviews:
+    get:
+      tags:
+        - Reviews
+      summary: List customer book reviews
+      operationId: listBookReviews
+      parameters:
+        - name: bookId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/PageQuery'
+        - $ref: '#/components/parameters/SizeQuery'
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [HELPFUL, RECENT, RATING_HIGH, RATING_LOW]
+            default: HELPFUL
+      responses:
+        '200':
+          description: Book review listing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookReviewsResponse'
+        '404':
+          $ref: '#/components/responses/Error404'
+    post:
+      tags:
+        - Reviews
+      summary: Submit a verified review and rating
+      operationId: submitBookReview
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bookId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitReviewRequest'
+      responses:
+        '201':
+          description: Review accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewDto'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+
+  /reviews/{reviewId}/votes:
+    post:
+      tags:
+        - Reviews
+      summary: Vote on review helpfulness
+      operationId: voteReviewHelpful
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: reviewId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VoteReviewRequest'
+      responses:
+        '200':
+          description: Vote recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoteReviewResponse'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  # ============================================================================
+  # RECOMMENDATIONS APIS
+  # ============================================================================
+  /recommendations/home:
+    get:
+      tags:
+        - Recommendations
+      summary: Get personalized home carousel
+      operationId: getHomeRecommendations
+      security:
+        - {}
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StoreCodeHeader'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+            maximum: 30
+      responses:
+        '200':
+          description: Recommendations computed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeRecommendationsResponse'
+
+  /recommendations/books/{bookId}/upsell:
+    get:
+      tags:
+        - Recommendations
+      summary: Get Up-Sell editions for a book
+      operationId: getBookUpSell
+      parameters:
+        - name: bookId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Up-sell options.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpSellResponse'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  /recommendations/books/{bookId}/cross-sell:
+    get:
+      tags:
+        - Recommendations
+      summary: Get Cross-Sell companion titles
+      operationId: getBookCrossSell
+      parameters:
+        - name: bookId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 3
+      responses:
+        '200':
+          description: Cross-sell companion books.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CrossSellResponse'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+# ==============================================================================
+# REUSABLE COMPONENTS
+# ==============================================================================
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Enter RS256-signed JWT access token.
+
+  parameters:
+    StoreCodeHeader:
+      name: X-Store-Code
+      in: header
+      description: Multi-store tenant identifier code.
+      required: false
+      schema:
+        type: string
+        default: BK_MAIN_ONLINE
+
+    GuestSessionHeader:
+      name: X-Guest-Session-Token
+      in: header
+      description: Anonymous guest user cryptographic session token.
+      required: false
+      schema:
+        type: string
+
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      description: Cryptographic UUIDv4 token guaranteeing idempotent request execution.
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    PageQuery:
+      name: page
+      in: query
+      description: 1-indexed pagination page number.
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+    SizeQuery:
+      name: size
+      in: query
+      description: Page size item quantity limit.
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  responses:
+    Error400:
+      description: Bad Request / Validation Failure.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Error401:
+      description: Unauthorized / Missing or Expired JWT.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Error403:
+      description: Forbidden / Entitlement or RBAC restriction.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Error404:
+      description: Resource Not Found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Error409:
+      description: Concurrency / Idempotency / Business state conflict.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Error422:
+      description: Unprocessable Entity.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Error429:
+      description: Too Many Requests / Rate Limit Exceeded.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Error500:
+      description: Internal Server Error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+  schemas:
+    # --- Envelopes & Primitives ---
+    ErrorEnvelope:
+      type: object
+      required: [success, error]
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          required: [code, message, timestamp, requestId]
+          properties:
+            code:
+              type: string
+              example: VALIDATION_FAILED
+            message:
+              type: string
+              example: Request payload validation check failed.
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                  issue:
+                    type: string
+            timestamp:
+              type: string
+              format: date-time
+            requestId:
+              type: string
+              format: uuid
+
+    PaginationMeta:
+      type: object
+      required: [page, size, totalElements, totalPages]
+      properties:
+        page:
+          type: integer
+          example: 1
+        size:
+          type: integer
+          example: 20
+        totalElements:
+          type: integer
+          example: 142
+        totalPages:
+          type: integer
+          example: 8
+        hasNext:
+          type: boolean
+          example: true
+        hasPrevious:
+          type: boolean
+          example: false
+
+    MoneyDto:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount:
+          type: integer
+          description: Price represented in the lowest denominational unit (e.g. cents, paise).
+          example: 3499
+        currency:
+          type: string
+          description: ISO 4217 currency code.
+          example: USD
+
+    GenericMessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          example: Action completed successfully.
+
+    # --- Auth & User Models ---
+    GuestSessionResponse:
+      type: object
+      required: [guestSessionToken, expiresAt]
+      properties:
+        guestSessionToken:
+          type: string
+          example: gst_e7b92f8012d449fa894c25f77890a1bc
+        expiresAt:
+          type: string
+          format: date-time
+
+    RegisterRequest:
+      type: object
+      required: [email, password, firstName, lastName]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          example: customer@example.com
+        password:
+          type: string
+          minLength: 8
+          maxLength: 64
+          example: SecurePassword123!
+        firstName:
+          type: string
+          maxLength: 100
+          example: John
+        lastName:
+          type: string
+          maxLength: 100
+          example: Doe
+        phoneNumber:
+          type: string
+          example: "+14155552671"
+        guestSessionToken:
+          type: string
+          example: gst_e7b92f8012d449fa894c25f77890a1bc
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: customer@example.com
+        password:
+          type: string
+          example: SecurePassword123!
+        guestSessionToken:
+          type: string
+
+    AuthTokenResponse:
+      type: object
+      required: [userId, email, roles, accessToken, refreshToken, expiresInSeconds]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        roles:
+          type: array
+          items:
+            type: string
+          example: ["ROLE_CUSTOMER"]
+        entitlements:
+          type: array
+          items:
+            type: string
+          example: ["VIP_CLUB"]
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expiresInSeconds:
+          type: integer
+          example: 900
+
+    RefreshTokenRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+
+    TokenRotationResponse:
+      type: object
+      required: [accessToken, refreshToken, expiresInSeconds]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expiresInSeconds:
+          type: integer
+
+    UserProfileResponse:
+      type: object
+      required: [userId, email, firstName, lastName, roles, createdAt]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        email:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        phoneNumber:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+        entitlements:
+          type: array
+          items:
+            type: string
+        walletBalance:
+          $ref: '#/components/schemas/MoneyDto'
+        createdAt:
+          type: string
+          format: date-time
+
+    UpdateUserProfileRequest:
+      type: object
+      required: [version]
+      properties:
+        firstName:
+          type: string
+          maxLength: 100
+        lastName:
+          type: string
+          maxLength: 100
+        phoneNumber:
+          type: string
+        version:
+          type: integer
+          description: Optimistic locking version token.
+
+    AddressDto:
+      type: object
+      required: [addressId, addressType, recipientName, phoneNumber, streetLine1, city, stateProvince, postalCode, countryCode, isDefault]
+      properties:
+        addressId:
+          type: string
+          format: uuid
+        addressType:
+          type: string
+          enum: [SHIPPING, BILLING, BOTH]
+        recipientName:
+          type: string
+        phoneNumber:
+          type: string
+        streetLine1:
+          type: string
+        streetLine2:
+          type: string
+        city:
+          type: string
+        stateProvince:
+          type: string
+        postalCode:
+          type: string
+        countryCode:
+          type: string
+          maxLength: 2
+        isDefault:
+          type: boolean
+
+    CreateAddressRequest:
+      type: object
+      required: [addressType, recipientName, phoneNumber, streetLine1, city, stateProvince, postalCode, countryCode]
+      properties:
+        addressType:
+          type: string
+          enum: [SHIPPING, BILLING, BOTH]
+        recipientName:
+          type: string
+        phoneNumber:
+          type: string
+        streetLine1:
+          type: string
+        streetLine2:
+          type: string
+        city:
+          type: string
+        stateProvince:
+          type: string
+        postalCode:
+          type: string
+        countryCode:
+          type: string
+          maxLength: 2
+        isDefault:
+          type: boolean
+          default: false
+
+    # --- Catalog Models ---
+    CategoryNodeDto:
+      type: object
+      required: [categoryId, categoryName, categorySlug, treeLevel]
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+        categoryName:
+          type: string
+        categorySlug:
+          type: string
+        treeLevel:
+          type: integer
+        subcategories:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryNodeDto'
+
+    AuthorDto:
+      type: object
+      required: [authorId, fullName, authorSlug]
+      properties:
+        authorId:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+        authorSlug:
+          type: string
+        avatarUrl:
+          type: string
+        bookCount:
+          type: integer
+
+    AuthorListResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthorDto'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    AuthorDetailResponse:
+      type: object
+      required: [authorId, fullName, authorSlug, bibliography]
+      properties:
+        authorId:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+        authorSlug:
+          type: string
+        biography:
+          type: string
+        avatarUrl:
+          type: string
+        bibliography:
+          type: array
+          items:
+            type: object
+            properties:
+              bookId:
+                type: string
+                format: uuid
+              title:
+                type: string
+              isbn13:
+                type: string
+              primaryFormat:
+                type: string
+              basePrice:
+                $ref: '#/components/schemas/MoneyDto'
+
+    PublisherDto:
+      type: object
+      required: [publisherId, publisherName, publisherCode]
+      properties:
+        publisherId:
+          type: string
+          format: uuid
+        publisherName:
+          type: string
+        publisherCode:
+          type: string
+        websiteUrl:
+          type: string
+
+    PublisherListResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublisherDto'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    BookFormatSummaryDto:
+      type: object
+      required: [formatId, formatType, sku, price, inStock]
+      properties:
+        formatId:
+          type: string
+          format: uuid
+        formatType:
+          type: string
+          enum: [PAPERBACK, HARDCOVER, EBOOK, AUDIOBOOK]
+        sku:
+          type: string
+        price:
+          $ref: '#/components/schemas/MoneyDto'
+        inStock:
+          type: boolean
+
+    BookCatalogCardDto:
+      type: object
+      required: [bookId, isbn13, title, primaryCategory, coverImageUrl, averageRating, reviewCount, availableFormats]
+      properties:
+        bookId:
+          type: string
+          format: uuid
+        isbn13:
+          type: string
+        title:
+          type: string
+        subtitle:
+          type: string
+        authors:
+          type: array
+          items:
+            type: object
+            properties:
+              authorId:
+                type: string
+                format: uuid
+              name:
+                type: string
+              role:
+                type: string
+        primaryCategory:
+          type: object
+          properties:
+            categoryId:
+              type: string
+              format: uuid
+            name:
+              type: string
+        coverImageUrl:
+          type: string
+        averageRating:
+          type: number
+          format: float
+        reviewCount:
+          type: integer
+        availableFormats:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookFormatSummaryDto'
+
+    BookCatalogListingResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookCatalogCardDto'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    BookDetailResponse:
+      type: object
+      required: [bookId, isbn13, title, publisher, authors, synopsis, publicationDate, ratingSummary, formats]
+      properties:
+        bookId:
+          type: string
+          format: uuid
+        isbn13:
+          type: string
+        isbn10:
+          type: string
+        title:
+          type: string
+        subtitle:
+          type: string
+        publisher:
+          type: object
+          properties:
+            publisherId:
+              type: string
+              format: uuid
+            name:
+              type: string
+        authors:
+          type: array
+          items:
+            type: object
+            properties:
+              authorId:
+                type: string
+                format: uuid
+              name:
+                type: string
+              role:
+                type: string
+        synopsis:
+          type: string
+        publicationDate:
+          type: string
+          format: date
+        edition:
+          type: string
+        pageCount:
+          type: integer
+        language:
+          type: string
+        coverImageUrl:
+          type: string
+        ratingSummary:
+          type: object
+          properties:
+            averageRating:
+              type: number
+              format: float
+            totalReviews:
+              type: integer
+        formats:
+          type: array
+          items:
+            type: object
+            properties:
+              formatId:
+                type: string
+                format: uuid
+              formatType:
+                type: string
+              sku:
+                type: string
+              price:
+                $ref: '#/components/schemas/MoneyDto'
+              stockQuantity:
+                type: integer
+              weightGrams:
+                type: integer
+        merchandising:
+          type: object
+          properties:
+            upSellItem:
+              type: object
+            crossSellItems:
+              type: array
+              items:
+                type: object
+
+    # --- Search Models ---
+    SearchResultResponse:
+      type: object
+      required: [query, totalMatches, facets, results]
+      properties:
+        query:
+          type: string
+        totalMatches:
+          type: integer
+        facets:
+          type: object
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              bookId:
+                type: string
+                format: uuid
+              title:
+                type: string
+              authorNames:
+                type: array
+                items:
+                  type: string
+              matchHighlight:
+                type: string
+              startingPrice:
+                $ref: '#/components/schemas/MoneyDto'
+              averageRating:
+                type: number
+
+    SearchSuggestionDto:
+      type: object
+      required: [type, id, text]
+      properties:
+        type:
+          type: string
+          enum: [BOOK, AUTHOR, CATEGORY]
+        id:
+          type: string
+        text:
+          type: string
+
+    # --- Wishlist Models ---
+    WishlistItemDto:
+      type: object
+      required: [bookId, title, authorName, currentPrice, addedAt]
+      properties:
+        wishlistItemId:
+          type: string
+          format: uuid
+        bookId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        authorName:
+          type: string
+        coverImageUrl:
+          type: string
+        currentPrice:
+          $ref: '#/components/schemas/MoneyDto'
+        desiredPriceAlert:
+          type: integer
+        addedAt:
+          type: string
+          format: date-time
+
+    WishlistResponse:
+      type: object
+      required: [wishlistId, name, totalItems, items]
+      properties:
+        wishlistId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        totalItems:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WishlistItemDto'
+
+    AddWishlistItemRequest:
+      type: object
+      required: [bookId]
+      properties:
+        bookId:
+          type: string
+          format: uuid
+        desiredPriceAlert:
+          type: integer
+          minimum: 1
+
+    # --- Cart Models ---
+    CartLineItemDto:
+      type: object
+      required: [formatId, bookId, title, formatType, sku, unitPrice, quantity, lineTotal]
+      properties:
+        formatId:
+          type: string
+          format: uuid
+        bookId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        formatType:
+          type: string
+        sku:
+          type: string
+        unitPrice:
+          type: integer
+        quantity:
+          type: integer
+        lineTotal:
+          type: integer
+
+    CartResponse:
+      type: object
+      required: [cartId, currency, subtotalAmount, discountAmount, totalPayableAmount, itemCount, items]
+      properties:
+        cartId:
+          type: string
+          format: uuid
+        currency:
+          type: string
+        appliedCouponCode:
+          type: string
+        subtotalAmount:
+          type: integer
+        discountAmount:
+          type: integer
+        estimatedTaxAmount:
+          type: integer
+        totalPayableAmount:
+          type: integer
+        itemCount:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartLineItemDto'
+
+    AddCartItemRequest:
+      type: object
+      required: [formatId, quantity]
+      properties:
+        formatId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 10
+
+    UpdateCartItemQuantityRequest:
+      type: object
+      required: [quantity]
+      properties:
+        quantity:
+          type: integer
+          minimum: 0
+          maximum: 10
+
+    CartMutationResponse:
+      type: object
+      required: [cartId, itemCount, subtotalAmount]
+      properties:
+        cartId:
+          type: string
+          format: uuid
+        itemCount:
+          type: integer
+        subtotalAmount:
+          type: integer
+        message:
+          type: string
+
+    MergeCartRequest:
+      type: object
+      required: [guestSessionToken]
+      properties:
+        guestSessionToken:
+          type: string
+
+    ApplyCouponRequest:
+      type: object
+      required: [couponCode]
+      properties:
+        couponCode:
+          type: string
+          minLength: 4
+          maxLength: 32
+
+    # --- Orders Models ---
+    CheckoutOrderRequest:
+      type: object
+      required: [cartId, shippingAddressId, billingAddressId, shippingCarrierCode, shippingServiceLevel, paymentIntent]
+      properties:
+        cartId:
+          type: string
+          format: uuid
+        shippingAddressId:
+          type: string
+          format: uuid
+        billingAddressId:
+          type: string
+          format: uuid
+        shippingCarrierCode:
+          type: string
+          example: FEDEX
+        shippingServiceLevel:
+          type: string
+          example: STANDARD
+        paymentIntent:
+          type: object
+          required: [tenderSplits]
+          properties:
+            tenderSplits:
+              type: array
+              items:
+                type: object
+                required: [tenderType, amount]
+                properties:
+                  tenderType:
+                    type: string
+                    enum: [DIGITAL_WALLET, CREDIT_CARD, DEBIT_CARD, UPI, GIFT_CARD]
+                  amount:
+                    type: integer
+                  gatewayPaymentMethodToken:
+                    type: string
+
+    OrderConfirmationResponse:
+      type: object
+      required: [orderNumber, orderStatus, totalAmount, currency, placedAt, paymentStatus, lineItems]
+      properties:
+        orderNumber:
+          type: string
+        orderStatus:
+          type: string
+        totalAmount:
+          type: integer
+        currency:
+          type: string
+        placedAt:
+          type: string
+          format: date-time
+        estimatedDeliveryWindow:
+          type: object
+          properties:
+            minDate:
+              type: string
+              format: date-time
+            maxDate:
+              type: string
+              format: date-time
+        paymentStatus:
+          type: string
+        lineItems:
+          type: array
+          items:
+            type: object
+            properties:
+              sku:
+                type: string
+              title:
+                type: string
+              quantity:
+                type: integer
+              lineTotal:
+                type: integer
+
+    OrderSummaryDto:
+      type: object
+      required: [orderNumber, orderStatus, totalAmount, currency, totalItems, placedAt]
+      properties:
+        orderNumber:
+          type: string
+        orderStatus:
+          type: string
+        totalAmount:
+          type: integer
+        currency:
+          type: string
+        totalItems:
+          type: integer
+        placedAt:
+          type: string
+          format: date-time
+        trackingNumber:
+          type: string
+        carrier:
+          type: string
+        isReturnEligible:
+          type: boolean
+
+    OrderHistoryResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderSummaryDto'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    OrderDetailResponse:
+      type: object
+      required: [orderNumber, orderStatus, pricing, shippingDetails, lineItems]
+      properties:
+        orderNumber:
+          type: string
+        orderStatus:
+          type: string
+        pricing:
+          type: object
+          properties:
+            subtotalAmount:
+              type: integer
+            discountAmount:
+              type: integer
+            shippingAmount:
+              type: integer
+            taxAmount:
+              type: integer
+            totalAmount:
+              type: integer
+            currency:
+              type: string
+        shippingDetails:
+          type: object
+        lineItems:
+          type: array
+          items:
+            type: object
+
+    CancelOrderRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          maxLength: 255
+
+    OrderCancellationResponse:
+      type: object
+      required: [orderNumber, orderStatus, refundStatus, refundAmount, cancelledAt]
+      properties:
+        orderNumber:
+          type: string
+        orderStatus:
+          type: string
+        refundStatus:
+          type: string
+        refundAmount:
+          type: integer
+        cancelledAt:
+          type: string
+          format: date-time
+
+    CreateReturnRequest:
+      type: object
+      required: [reasonCode, returnItems]
+      properties:
+        reasonCode:
+          type: string
+          enum: [DAMAGED_ITEM, WRONG_ITEM, CHANGED_MIND, POOR_QUALITY]
+        customerRemarks:
+          type: string
+        returnItems:
+          type: array
+          items:
+            type: object
+            required: [orderLineItemId, quantity]
+            properties:
+              orderLineItemId:
+                type: string
+                format: uuid
+              quantity:
+                type: integer
+                minimum: 1
+
+    ReturnAuthorizationResponse:
+      type: object
+      required: [rmaNumber, rmaStatus, returnCarrier, returnTrackingNumber, prepaidReturnLabelUrl, estimatedRefundAmount]
+      properties:
+        rmaNumber:
+          type: string
+        rmaStatus:
+          type: string
+        returnCarrier:
+          type: string
+        returnTrackingNumber:
+          type: string
+        prepaidReturnLabelUrl:
+          type: string
+          format: uri
+        estimatedRefundAmount:
+          type: integer
+        returnInstructions:
+          type: string
+
+    # --- Payments Models ---
+    CreatePaymentIntentRequest:
+      type: object
+      required: [orderNumber]
+      properties:
+        orderNumber:
+          type: string
+        useWalletBalance:
+          type: boolean
+          default: false
+        giftCardCode:
+          type: string
+
+    PaymentIntentResponse:
+      type: object
+      required: [paymentTransactionId, totalOrderAmount, remainingPayableViaGateway, currency]
+      properties:
+        paymentTransactionId:
+          type: string
+          format: uuid
+        totalOrderAmount:
+          type: integer
+        walletDeduction:
+          type: integer
+        giftCardDeduction:
+          type: integer
+        remainingPayableViaGateway:
+          type: integer
+        gatewayClientSecret:
+          type: string
+        gatewayProvider:
+          type: string
+        currency:
+          type: string
+
+    CustomerWalletResponse:
+      type: object
+      required: [walletId, currentBalance, heldBalance, currency, recentLedger]
+      properties:
+        walletId:
+          type: string
+          format: uuid
+        currentBalance:
+          type: integer
+        heldBalance:
+          type: integer
+        currency:
+          type: string
+        recentLedger:
+          type: array
+          items:
+            type: object
+            properties:
+              entryId:
+                type: string
+                format: uuid
+              entryType:
+                type: string
+              amount:
+                type: integer
+              balanceAfter:
+                type: integer
+              createdAt:
+                type: string
+                format: date-time
+
+    # --- Shipping Models ---
+    ShippingRateCalculationRequest:
+      type: object
+      required: [destinationPostalCode, countryCode, cartId]
+      properties:
+        destinationPostalCode:
+          type: string
+        countryCode:
+          type: string
+          maxLength: 2
+        cartId:
+          type: string
+          format: uuid
+
+    ShippingRateOptionDto:
+      type: object
+      required: [carrierCode, serviceLevel, rateAmount, currency, isFreeShippingApplied, estimatedDeliveryMin, estimatedDeliveryMax, transitDays]
+      properties:
+        carrierCode:
+          type: string
+        serviceLevel:
+          type: string
+        rateAmount:
+          type: integer
+        currency:
+          type: string
+        isFreeShippingApplied:
+          type: boolean
+        estimatedDeliveryMin:
+          type: string
+          format: date-time
+        estimatedDeliveryMax:
+          type: string
+          format: date-time
+        transitDays:
+          type: string
+
+    ConsignmentTrackingResponse:
+      type: object
+      required: [trackingNumber, carrierCode, serviceLevel, consignmentStatus, milestones]
+      properties:
+        trackingNumber:
+          type: string
+        carrierCode:
+          type: string
+        serviceLevel:
+          type: string
+        consignmentStatus:
+          type: string
+        estimatedDelivery:
+          type: string
+          format: date-time
+        milestones:
+          type: array
+          items:
+            type: object
+            properties:
+              status:
+                type: string
+              location:
+                type: string
+              timestamp:
+                type: string
+                format: date-time
+              remarks:
+                type: string
+
+    # --- Reviews Models ---
+    ReviewDto:
+      type: object
+      required: [reviewId, authorName, rating, isVerifiedPurchase, helpfulVotes, createdAt]
+      properties:
+        reviewId:
+          type: string
+          format: uuid
+        authorName:
+          type: string
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        reviewTitle:
+          type: string
+        reviewBody:
+          type: string
+        isVerifiedPurchase:
+          type: boolean
+        helpfulVotes:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    BookReviewsResponse:
+      type: object
+      required: [bookId, averageRating, totalReviews, reviews]
+      properties:
+        bookId:
+          type: string
+          format: uuid
+        averageRating:
+          type: number
+          format: float
+        totalReviews:
+          type: integer
+        reviews:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewDto'
+
+    SubmitReviewRequest:
+      type: object
+      required: [rating]
+      properties:
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        reviewTitle:
+          type: string
+          maxLength: 200
+        reviewBody:
+          type: string
+
+    VoteReviewRequest:
+      type: object
+      required: [isHelpful]
+      properties:
+        isHelpful:
+          type: boolean
+
+    VoteReviewResponse:
+      type: object
+      required: [reviewId, helpfulVotesCount, userVote]
+      properties:
+        reviewId:
+          type: string
+          format: uuid
+        helpfulVotesCount:
+          type: integer
+        userVote:
+          type: boolean
+
+    # --- Recommendations Models ---
+    HomeRecommendationsResponse:
+      type: object
+      required: [strategy, recommendations]
+      properties:
+        strategy:
+          type: string
+        recommendations:
+          type: array
+          items:
+            type: object
+            properties:
+              bookId:
+                type: string
+                format: uuid
+              title:
+                type: string
+              authorName:
+                type: string
+              coverImageUrl:
+                type: string
+              startingPrice:
+                $ref: '#/components/schemas/MoneyDto'
+              averageRating:
+                type: number
+              recommendationReason:
+                type: string
+
+    UpSellResponse:
+      type: object
+      required: [sourceBookId, hasUpSell]
+      properties:
+        sourceBookId:
+          type: string
+          format: uuid
+        hasUpSell:
+          type: boolean
+        upSellOption:
+          type: object
+          properties:
+            targetBookId:
+              type: string
+              format: uuid
+            formatType:
+              type: string
+            editionTitle:
+              type: string
+            basePrice:
+              $ref: '#/components/schemas/MoneyDto'
+            priceDelta:
+              $ref: '#/components/schemas/MoneyDto'
+            benefits:
+              type: array
+              items:
+                type: string
+
+    CrossSellResponse:
+      type: object
+      required: [sourceBookId, bundleDiscountPercentage, companionTitles]
+      properties:
+        sourceBookId:
+          type: string
+          format: uuid
+        bundleDiscountPercentage:
+          type: number
+        companionTitles:
+          type: array
+          items:
+            type: object
+            properties:
+              bookId:
+                type: string
+                format: uuid
+              title:
+                type: string
+              authorName:
+                type: string
+              formatType:
+                type: string
+              individualPrice:
+                type: integer
+              bundlePrice:
+                type: integer
+              coverImageUrl:
+                type: string
