@@ -28,9 +28,9 @@ spring:
     baseline-on-migrate: true
 
 jwt:
-  secret: bookcorner_jwt_super_secret_signing_key_2026_enterprise_grade_security_must_be_256_bits
-  access-token-expiration-seconds: 900
-  refresh-token-expiration-seconds: 604800
+  secret: ${JWT_SECRET:bookcorner_jwt_super_secret_signing_key_2026_enterprise_grade_security_must_be_256_bits}
+  access-token-expiration-seconds: ${JWT_ACCESS_TOKEN_EXPIRATION_SECONDS:900}
+  refresh-token-expiration-seconds: ${JWT_REFRESH_TOKEN_EXPIRATION_SECONDS:604800}
 
 server:
   port: 8080
