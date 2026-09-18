@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: book-corner-test
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        default_schema: public
+  flyway:
+    enabled: false
+
+jwt:
+  secret: test_jwt_super_secret_signing_key_2026_enterprise_grade_security_must_be_256_bits
+  access-token-expiration-seconds: 3600
+  refresh-token-expiration-seconds: 86400
+
+logging:
+  level:
+    com.bookcorner: DEBUG
+    org.springframework.security: WARN

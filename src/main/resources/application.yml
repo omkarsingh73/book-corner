@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: book-corner
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/bookcorner}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 300000
+      connection-timeout: 20000
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+jwt:
+  secret: bookcorner_jwt_super_secret_signing_key_2026_enterprise_grade_security_must_be_256_bits
+  access-token-expiration-seconds: 900
+  refresh-token-expiration-seconds: 604800
+
+server:
+  port: 8080
+
+logging:
+  level:
+    com.bookcorner: INFO
+    org.springframework.security: WARN
