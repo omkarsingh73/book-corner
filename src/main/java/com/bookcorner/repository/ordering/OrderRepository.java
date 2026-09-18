@@ -64,4 +64,16 @@ public interface OrderRepository extends JpaRepository<OrderEntity, UUID>, JpaSp
           AND o.placedAt >= :cutoffTime
         """)
     boolean isOrderCancellable(@Param("orderNumber") String orderNumber, @Param("cutoffTime") Instant cutoffTime);
+
+    /**
+     * Check if a customer has purchased a specific book in any completed order.
+     */
+    @Query("""
+        SELECT COUNT(o) > 0 FROM OrderEntity o 
+        JOIN o.lineItems li 
+        WHERE o.user.id = :userId 
+          AND li.format.book.id = :bookId 
+          AND o.orderStatus NOT IN ('CANCELLED', 'FAILED')
+        """)
+    boolean hasUserPurchasedBook(@Param("userId") UUID userId, @Param("bookId") UUID bookId);
 }

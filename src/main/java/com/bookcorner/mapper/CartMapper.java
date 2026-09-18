@@ -33,9 +33,9 @@ public interface CartMapper {
     @Mapping(target = "items", source = "items")
     @Mapping(target = "totalQuantity", source = "items", qualifiedByName = "calculateTotalQuantity")
     @Mapping(target = "subtotal", source = "items", qualifiedByName = "calculateSubtotal")
-    @Mapping(target = "discount", constant = "0")
-    @Mapping(target = "estimatedShipping", constant = "0")
-    @Mapping(target = "estimatedTax", constant = "0")
+    @Mapping(target = "discount", source = "entity", qualifiedByName = "defaultZeroMoney")
+    @Mapping(target = "estimatedShipping", source = "entity", qualifiedByName = "defaultZeroMoney")
+    @Mapping(target = "estimatedTax", source = "entity", qualifiedByName = "defaultZeroMoney")
     @Mapping(target = "total", source = "items", qualifiedByName = "calculateSubtotal")
     CartResponse toCartResponse(CartEntity entity);
 
@@ -90,5 +90,10 @@ public interface CartMapper {
                 .sum();
         String currency = items.get(0).getFormat().getCurrencyCode();
         return MoneyDto.of(totalCents, currency);
+    }
+
+    @Named("defaultZeroMoney")
+    default MoneyDto defaultZeroMoney(CartEntity entity) {
+        return MoneyDto.of(0, "USD");
     }
 }
