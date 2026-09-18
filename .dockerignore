@@ -1,0 +1,12 @@
+.git
+.gitignore
+.idea
+.vscode
+*.iml
+target/
+*.log
+.DS_Store
+*.md
+.gemini/
+Dockerfile*
+docker-compose*

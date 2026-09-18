@@ -1,0 +1,134 @@
+services:
+  # =============================================================================
+  # 1. PostgreSQL 16 Relational Database Engine
+  # =============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: bookcorner-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: bookcorner
+      POSTGRES_USER: bookcorner_admin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-BookCorner2026!Secure}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bookcorner_admin -d bookcorner"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - bookcorner-network
+    deploy:
+      resources:
+        limits:
+          cpus: "1.50"
+          memory: 1024M
+        reservations:
+          cpus: "0.50"
+          memory: 256M
+
+  # =============================================================================
+  # 2. Standalone Flyway Migration Runner (Guaranteed Pre-Startup Execution)
+  # =============================================================================
+  flyway-migration:
+    image: flyway/flyway:10-alpine
+    container_name: bookcorner-flyway
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      -url=jdbc:postgresql://postgres:5432/bookcorner
+      -user=bookcorner_admin
+      -password=${POSTGRES_PASSWORD:-BookCorner2026!Secure}
+      -schemas=public,member,catalog,ordering,payment,shipping,store,review
+      -defaultSchema=public
+      -connectRetries=10
+      -baselineOnMigrate=true
+      migrate
+    volumes:
+      - ./src/main/resources/db/migration:/flyway/sql:ro
+    networks:
+      - bookcorner-network
+
+  # =============================================================================
+  # 3. Book Corner Core REST API Application
+  # =============================================================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: book-corner:1.0.0
+    container_name: bookcorner-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      flyway-migration:
+        condition: service_completed_successfully
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bookcorner?currentSchema=public
+      SPRING_DATASOURCE_USERNAME: bookcorner_admin
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-BookCorner2026!Secure}
+      JWT_SECRET: ${JWT_SECRET:-bookcorner_jwt_super_secret_signing_key_2026_enterprise_grade_security_must_be_256_bits}
+      JWT_ACCESS_TOKEN_EXPIRATION_SECONDS: 900
+      JWT_REFRESH_TOKEN_EXPIRATION_SECONDS: 604800
+      SERVER_PORT: 8080
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,metrics,prometheus"
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - bookcorner-network
+    deploy:
+      resources:
+        limits:
+          cpus: "2.00"
+          memory: 1536M
+        reservations:
+          cpus: "0.50"
+          memory: 512M
+
+  # =============================================================================
+  # 4. Optional Tooling: pgAdmin Web Dashboard (Management Profile)
+  # =============================================================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: bookcorner-pgadmin
+    restart: unless-stopped
+    profiles:
+      - tools
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@bookcorner.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-Admin2026!Secure}
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    networks:
+      - bookcorner-network
+
+# =============================================================================
+# Persistent Storage Volumes & Dedicated Bridge Network
+# =============================================================================
+volumes:
+  postgres_data:
+    name: bookcorner_postgres_data
+
+networks:
+  bookcorner-network:
+    name: bookcorner_network
+    driver: bridge

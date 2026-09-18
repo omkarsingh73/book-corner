@@ -103,6 +103,7 @@ public class SecurityConfig {
                     "/swagger-ui.html",
                     "/webjars/**",
                     "/actuator/health",
+                    "/actuator/health/**",
                     "/actuator/info"
                 ).permitAll()
 
