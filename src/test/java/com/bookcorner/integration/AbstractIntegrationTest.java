@@ -3,9 +3,12 @@ package com.bookcorner.integration;
 import com.bookcorner.security.JwtProvider;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -44,6 +47,21 @@ public abstract class AbstractIntegrationTest {
 
     @Autowired
     protected JwtProvider jwtProvider;
+
+    @Autowired(required = false)
+    protected CacheManager cacheManager;
+
+    @BeforeEach
+    void clearAllCaches() {
+        if (cacheManager != null) {
+            for (String cacheName : cacheManager.getCacheNames()) {
+                Cache cache = cacheManager.getCache(cacheName);
+                if (cache != null) {
+                    cache.clear();
+                }
+            }
+        }
+    }
 
     static {
         postgres.start();

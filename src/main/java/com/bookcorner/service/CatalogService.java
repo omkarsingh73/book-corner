@@ -135,7 +135,7 @@ public class CatalogService {
      * Retrieves top-level category tree with subcategories eagerly populated.
      */
     @Transactional(readOnly = true)
-    @Cacheable(value = "categories")
+    @Cacheable(value = "categories", unless = "#result == null || #result.isEmpty()")
     public List<CategoryNodeDto> listCategories() {
         log.info("Fetching complete category hierarchical tree");
         List<CategoryEntity> rootCategories = categoryRepository.findAllRootCategoriesWithSubcategories();
