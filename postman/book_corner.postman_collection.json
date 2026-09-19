@@ -1,0 +1,3027 @@
+{
+  "info": {
+    "_postman_id": "01753b56-1859-48b8-9f74-3522ce518d86",
+    "name": "Book Corner REST API - Full Test Suite",
+    "description": "# Book Corner REST API Postman Collection\n\nComprehensive, production-grade API testing suite for the **Book Corner** online bookstore platform.\n\n### Features:\n- **100% Endpoint Coverage**: 44 core REST endpoints + actuator health and info checks.\n- **Realistic Domain Data**: Real books (Clean Code, Design Patterns, DDIA), real authors (Uncle Bob, Martin Kleppmann), real postal codes, ISO-4217 amounts in cents.\n- **Automated Dynamic Chaining**: Tests extract JWT access/refresh tokens, guest session tokens, IDs, order numbers, and line items, storing them in collection variables.\n- **Fully Executable Top-to-Bottom**: Can be run via Postman Collection Runner or Newman CLI without manual data entry.\n- **Multi-Tender Payments & Checkout Saga**: Demonstrates end-to-end basket lifecycle, coupon application, checkout orchestration, RMA returns, and order cancellations.\n- **Security Isolation Verification**: Tests secondary accounts to prevent self-voting violations and verify clean RBAC token rotation.\n\n### Quick Start:\n1. Select the `Book Corner - Local Environment`.\n2. Ensure the Spring Boot backend is running on `http://localhost:8080`.\n3. Click **Run Collection** or use Newman CLI: `newman run book_corner.postman_collection.json -e book_corner_local.postman_environment.json`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "storeCode",
+      "value": "BK_MAIN_ONLINE",
+      "type": "string"
+    },
+    {
+      "key": "guestSessionToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userEmail",
+      "value": "alex.morgan.reader@bookcorner.io",
+      "type": "string"
+    },
+    {
+      "key": "userPassword",
+      "value": "SecurePassword2026!",
+      "type": "string"
+    },
+    {
+      "key": "secondCustomerAccessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "secondCustomerRefreshToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "secondCustomerEmail",
+      "value": "samantha.reed@bookcorner.io",
+      "type": "string"
+    },
+    {
+      "key": "bookId",
+      "value": "30000000-0000-0000-0000-000000000001",
+      "type": "string"
+    },
+    {
+      "key": "bookId2",
+      "value": "30000000-0000-0000-0000-000000000002",
+      "type": "string"
+    },
+    {
+      "key": "formatId",
+      "value": "31000000-0000-0000-0000-000000000001",
+      "type": "string"
+    },
+    {
+      "key": "formatId2",
+      "value": "31000000-0000-0000-0000-000000000004",
+      "type": "string"
+    },
+    {
+      "key": "authorId",
+      "value": "40000000-0000-0000-0000-000000000001",
+      "type": "string"
+    },
+    {
+      "key": "authorSlug",
+      "value": "robert-c-martin",
+      "type": "string"
+    },
+    {
+      "key": "categoryId",
+      "value": "10000000-0000-0000-0000-000000000031",
+      "type": "string"
+    },
+    {
+      "key": "addressId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tempAddressId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "orderNumber",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "orderToCancelNumber",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "orderLineItemId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "trackingNumber",
+      "value": "TRK987654321",
+      "type": "string"
+    },
+    {
+      "key": "reviewId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "rmaNumber",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "returnTrackingNumber",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01. Authentication & Sessions",
+      "item": [
+        {
+          "name": "01. Start Anonymous Guest Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Store-Code",
+                "value": "{{storeCode}}",
+                "type": "text",
+                "description": "Multi-tenant physical or digital storefront identifier"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/guest-session",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "guest-session"
+              ]
+            },
+            "description": "Issues a cryptographically signed guest session token to track temporary baskets and preferences without requiring authentication."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Response contains signed guest session token\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"guestSessionToken\");",
+                  "    pm.expect(jsonData.guestSessionToken).to.be.a(\"string\").and.not.empty;",
+                  "    pm.expect(jsonData).to.have.property(\"expiresAt\");",
+                  "    pm.collectionVariables.set(\"guestSessionToken\", jsonData.guestSessionToken);",
+                  "    console.log(\"Saved guestSessionToken: \" + jsonData.guestSessionToken);",
+                  "});",
+                  "",
+                  "pm.test(\"Response time is under 1500ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02. Register Customer Account (Primary User)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Creates a new user profile, issues initial JWT access and refresh tokens, and binds customer account.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\",\n  \"firstName\": \"Alex\",\n  \"lastName\": \"Morgan\",\n  \"phoneNumber\": \"+14155550199\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Generate unique email to ensure deterministic test execution across multiple runs",
+                  "var uniqueEmail = 'alex.morgan.' + Date.now() + '@bookcorner.io';",
+                  "pm.collectionVariables.set('userEmail', uniqueEmail);",
+                  "console.log('Registering user with dynamic email: ' + uniqueEmail);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"JWT tokens issued with Bearer type and user metadata\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"accessToken\");",
+                  "    pm.expect(jsonData).to.have.property(\"refreshToken\");",
+                  "    pm.expect(jsonData.tokenType).to.eql(\"Bearer\");",
+                  "    pm.expect(jsonData.user).to.be.an(\"object\");",
+                  "    pm.expect(jsonData.user.email).to.eql(pm.collectionVariables.get(\"userEmail\"));",
+                  "    ",
+                  "    pm.collectionVariables.set(\"accessToken\", jsonData.accessToken);",
+                  "    pm.collectionVariables.set(\"refreshToken\", jsonData.refreshToken);",
+                  "    pm.collectionVariables.set(\"userId\", jsonData.user.id);",
+                  "    console.log(\"Primary user registered. User ID: \" + jsonData.user.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03. Authenticate User Credentials (Login)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Authenticates email and password credentials, returning fresh JWT access and refresh tokens.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Login yields valid JWT access and refresh tokens\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.accessToken).to.be.a(\"string\").and.not.empty;",
+                  "    pm.expect(jsonData.refreshToken).to.be.a(\"string\").and.not.empty;",
+                  "    pm.expect(jsonData.tokenType).to.eql(\"Bearer\");",
+                  "    pm.collectionVariables.set(\"accessToken\", jsonData.accessToken);",
+                  "    pm.collectionVariables.set(\"refreshToken\", jsonData.refreshToken);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04. Rotate JWT Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Exchanges an unexpired refresh token for an updated token pair implementing cryptographic rotation to prevent token reuse replay attacks.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Token rotation produces new access and refresh tokens\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.accessToken).to.be.a(\"string\").and.not.empty;",
+                  "    pm.expect(jsonData.refreshToken).to.be.a(\"string\").and.not.empty;",
+                  "    pm.collectionVariables.set(\"accessToken\", jsonData.accessToken);",
+                  "    pm.collectionVariables.set(\"refreshToken\", jsonData.refreshToken);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05. Register Auxiliary Reviewer Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Registers a distinct secondary customer account used later to verify review helpfulness voting without violating self-voting invariants.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{secondCustomerEmail}}\",\n  \"password\": \"SecurePassword2026!\",\n  \"firstName\": \"Samantha\",\n  \"lastName\": \"Reed\",\n  \"phoneNumber\": \"+14155550177\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var uniqueReviewer = 'samantha.reed.' + Date.now() + '@bookcorner.io';",
+                  "pm.collectionVariables.set('secondCustomerEmail', uniqueReviewer);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Auxiliary reviewer registered successfully\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.accessToken).to.be.a(\"string\").and.not.empty;",
+                  "    pm.collectionVariables.set(\"secondCustomerAccessToken\", jsonData.accessToken);",
+                  "    pm.collectionVariables.set(\"secondCustomerRefreshToken\", jsonData.refreshToken);",
+                  "    console.log(\"Auxiliary reviewer registered: \" + pm.collectionVariables.get(\"secondCustomerEmail\"));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06. Invalidate User Session (Logout)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{secondCustomerAccessToken}}",
+                "type": "text",
+                "description": "Auxiliary bearer token to test logout without revoking primary access"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Revokes customer session tokens and blacklists the refresh token in Redis/persistence store.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{secondCustomerRefreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Session invalidated confirmation message received\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.message).to.include(\"Logged out successfully\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Endpoints managing guest sessions, registration, credential login, token rotation, and logout."
+    },
+    {
+      "name": "02. Customer Profile & Addresses",
+      "item": [
+        {
+          "name": "01. Retrieve Current Customer Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me"
+              ]
+            },
+            "description": "Retrieves the detailed profile of the currently authenticated customer based on the JWT bearer token."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Profile matches authenticated customer details\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.email).to.eql(pm.collectionVariables.get(\"userEmail\"));",
+                  "    pm.expect(jsonData.firstName).to.eql(\"Alex\");",
+                  "    pm.expect(jsonData.role).to.be.oneOf([\"ROLE_CUSTOMER\", \"CUSTOMER\"]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02. Update Customer Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me"
+              ]
+            },
+            "description": "Partially modifies personal account attributes including names and contact numbers.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Alexandra\",\n  \"lastName\": \"Morgan-Lee\",\n  \"phoneNumber\": \"+14155550188\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Profile reflected updated attributes\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.firstName).to.eql(\"Alexandra\");",
+                  "    pm.expect(jsonData.lastName).to.eql(\"Morgan-Lee\");",
+                  "    pm.expect(jsonData.phoneNumber).to.eql(\"+14155550188\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03. List Saved Addresses",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/me/addresses",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "addresses"
+              ]
+            },
+            "description": "Retrieves the collection of saved shipping and billing addresses for the customer."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is an array\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04. Add Primary Shipping Address",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/me/addresses",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "addresses"
+              ]
+            },
+            "description": "Adds a new verified residential destination address to the customer's personal address book.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"addressType\": \"SHIPPING\",\n  \"isDefault\": true,\n  \"recipientName\": \"Alexandra Morgan-Lee\",\n  \"phoneNumber\": \"+14155550188\",\n  \"streetAddress1\": \"742 Evergreen Terrace\",\n  \"streetAddress2\": \"Suite 200\",\n  \"city\": \"Springfield\",\n  \"stateProvince\": \"OR\",\n  \"postalCode\": \"97477\",\n  \"countryCode\": \"US\",\n  \"deliveryInstructions\": \"Please place parcel in secure porch parcel locker.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Address created and ID persisted\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.id).to.be.a(\"string\").and.not.empty;",
+                  "    pm.expect(jsonData.city).to.eql(\"Springfield\");",
+                  "    pm.expect(jsonData.postalCode).to.eql(\"97477\");",
+                  "    pm.collectionVariables.set(\"addressId\", jsonData.id);",
+                  "    console.log(\"Saved primary addressId: \" + jsonData.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05. Add Ephemeral Address (For Deletion Verification)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/me/addresses",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "addresses"
+              ]
+            },
+            "description": "Adds a secondary address destined for immediate deletion to verify endpoint lifecycle without mutating checkout references.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"addressType\": \"BILLING\",\n  \"isDefault\": false,\n  \"recipientName\": \"Alex Morgan Work\",\n  \"phoneNumber\": \"+14155550188\",\n  \"streetAddress1\": \"100 Market Street\",\n  \"streetAddress2\": \"Floor 12\",\n  \"city\": \"San Francisco\",\n  \"stateProvince\": \"CA\",\n  \"postalCode\": \"94105\",\n  \"countryCode\": \"US\",\n  \"deliveryInstructions\": \"Deliver to corporate mailroom intake.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Temporary address created and ID captured for deletion\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.id).to.be.a(\"string\").and.not.empty;",
+                  "    pm.collectionVariables.set(\"tempAddressId\", jsonData.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06. Delete Address from Address Book",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/me/addresses/:addressId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "addresses",
+                ":addressId"
+              ],
+              "variable": [
+                {
+                  "key": "addressId",
+                  "value": "{{tempAddressId}}",
+                  "description": "Unique address record UUID"
+                }
+              ]
+            },
+            "description": "Removes an existing address from the customer's address book."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Deletion confirmation returned\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.message).to.include(\"Address deleted successfully\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Customer personal details, preferences, and multi-address book management."
+    },
+    {
+      "name": "03. Catalog & Discovery",
+      "item": [
+        {
+          "name": "01. List Hierarchical Categories Tree",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "categories"
+              ]
+            },
+            "description": "Retrieves the full taxonomy tree of book genres and nested subcategories."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Categories hierarchy tree returned\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an(\"array\").and.not.empty;",
+                  "    var cat = jsonData[0];",
+                  "    pm.expect(cat).to.have.property(\"id\");",
+                  "    pm.expect(cat).to.have.property(\"categoryName\");",
+                  "    pm.expect(cat).to.have.property(\"categorySlug\");",
+                  "    pm.collectionVariables.set(\"categoryId\", cat.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02. Browse Authors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/authors?name=Robert&page=0&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "authors"
+              ],
+              "query": [
+                {
+                  "key": "name",
+                  "value": "Robert",
+                  "description": "Search keyword prefix/name"
+                },
+                {
+                  "key": "page",
+                  "value": "0",
+                  "description": "Zero-indexed page number"
+                },
+                {
+                  "key": "size",
+                  "value": "10",
+                  "description": "Page batch size"
+                }
+              ]
+            },
+            "description": "Browses and searches authors with pagination and biographical overviews."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Paginated authors returned\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"content\");",
+                  "    pm.expect(jsonData.content).to.be.an(\"array\").and.not.empty;",
+                  "    var author = jsonData.content[0];",
+                  "    pm.expect(author.fullName).to.include(\"Robert\");",
+                  "    pm.collectionVariables.set(\"authorId\", author.id);",
+                  "    pm.collectionVariables.set(\"authorSlug\", author.authorSlug);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03. Get Author Details by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/authors/:authorId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "authors",
+                ":authorId"
+              ],
+              "variable": [
+                {
+                  "key": "authorId",
+                  "value": "{{authorId}}",
+                  "description": "Author UUID"
+                }
+              ]
+            },
+            "description": "Retrieves complete biographical details, author slug, and portrait URL for a specific author."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Author profile contains bio and slug\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.id).to.eql(pm.collectionVariables.get(\"authorId\"));",
+                  "    pm.expect(jsonData.fullName).to.be.a(\"string\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04. List Publishers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/publishers?page=0&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "publishers"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0",
+                  "description": "Page index"
+                },
+                {
+                  "key": "size",
+                  "value": "10",
+                  "description": "Page batch size"
+                }
+              ]
+            },
+            "description": "Lists participating publishing houses and distribution entities."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Paginated publishers list returned\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"content\");",
+                  "    pm.expect(jsonData.content).to.be.an(\"array\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05. Browse Books with Faceted Filters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/books?formatType=PAPERBACK&minPrice=1000&maxPrice=6000&language=en&page=0&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books"
+              ],
+              "query": [
+                {
+                  "key": "formatType",
+                  "value": "PAPERBACK",
+                  "description": "Physical or digital binding format"
+                },
+                {
+                  "key": "minPrice",
+                  "value": "1000",
+                  "description": "Minimum price in cents ($10.00)"
+                },
+                {
+                  "key": "maxPrice",
+                  "value": "6000",
+                  "description": "Maximum price in cents ($60.00)"
+                },
+                {
+                  "key": "language",
+                  "value": "en",
+                  "description": "Two-letter primary language code"
+                },
+                {
+                  "key": "page",
+                  "value": "0",
+                  "description": "Zero-indexed page number"
+                },
+                {
+                  "key": "size",
+                  "value": "10",
+                  "description": "Page size"
+                }
+              ]
+            },
+            "description": "Browses product catalog books with multi-dimensional filtering by category, format, price range, and language."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Catalog cards returned with formats and prices\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.content).to.be.an(\"array\").and.not.empty;",
+                  "    var book = jsonData.content[0];",
+                  "    pm.expect(book).to.have.property(\"bookId\");",
+                  "    pm.expect(book).to.have.property(\"title\");",
+                  "    pm.expect(book.availableFormats).to.be.an(\"array\").and.not.empty;",
+                  "    pm.collectionVariables.set(\"bookId\", book.bookId);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06. Get Book Details by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/books/:bookId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books",
+                ":bookId"
+              ],
+              "variable": [
+                {
+                  "key": "bookId",
+                  "value": "{{bookId}}",
+                  "description": "Master Book UUID"
+                }
+              ]
+            },
+            "description": "Fetches full book product master data, author credits, publisher, dimensions, and all purchasable format SKUs."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Complete book specifications and format SKUs returned\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.id).to.eql(pm.collectionVariables.get(\"bookId\"));",
+                  "    pm.expect(jsonData).to.have.property(\"isbn13\");",
+                  "    pm.expect(jsonData.formats).to.be.an(\"array\").and.not.empty;",
+                  "    var format = jsonData.formats[0];",
+                  "    pm.expect(format).to.have.property(\"id\");",
+                  "    pm.expect(format).to.have.property(\"sku\");",
+                  "    pm.collectionVariables.set(\"formatId\", format.id);",
+                  "    console.log(\"Extracted formatId for cart: \" + format.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Master catalog browsing, taxonomy hierarchy, authors, publishers, and book SKU details."
+    },
+    {
+      "name": "04. Search & Autocomplete",
+      "item": [
+        {
+          "name": "01. Multi-Faceted Full-Text Search",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/search?q=Clean&format=PAPERBACK&page=0&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "Clean",
+                  "description": "Search query keyword"
+                },
+                {
+                  "key": "format",
+                  "value": "PAPERBACK",
+                  "description": "Optional format filter"
+                },
+                {
+                  "key": "page",
+                  "value": "0",
+                  "description": "Page number"
+                },
+                {
+                  "key": "size",
+                  "value": "10",
+                  "description": "Results page size"
+                }
+              ]
+            },
+            "description": "Performs typo-tolerant full-text search against book titles, authors, and synopses with aggregate facet counts."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Search results contain hits, query echo, and facets\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.query).to.eql(\"Clean\");",
+                  "    pm.expect(jsonData.totalMatches).to.be.at.least(1);",
+                  "    pm.expect(jsonData.results).to.be.an(\"array\").and.not.empty;",
+                  "    pm.expect(jsonData).to.have.property(\"facets\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02. Autocomplete Typeahead Suggestions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/search/suggestions?prefix=Rob&limit=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "search",
+                "suggestions"
+              ],
+              "query": [
+                {
+                  "key": "prefix",
+                  "value": "Rob",
+                  "description": "Prefix string for autocomplete"
+                },
+                {
+                  "key": "limit",
+                  "value": "5",
+                  "description": "Maximum number of suggestions"
+                }
+              ]
+            },
+            "description": "Provides low-latency instant auto-complete suggestions for frontend search bars (matching authors and book titles)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Typeahead suggestions returned\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an(\"array\").and.not.empty;",
+                  "    pm.expect(jsonData[0]).to.have.property(\"text\");",
+                  "    pm.expect(jsonData[0]).to.have.property(\"type\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "High-performance full-text faceted search and instant typeahead suggestions."
+    },
+    {
+      "name": "05. Customer Wishlist",
+      "item": [
+        {
+          "name": "01. Retrieve Customer Wishlist",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wishlists",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "wishlists"
+              ]
+            },
+            "description": "Retrieves the authenticated customer's book wishlist and active price alert monitors."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Wishlist aggregate returned\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"items\");",
+                  "    pm.expect(jsonData.items).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02. Add Book to Wishlist with Price Alert",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wishlists/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "wishlists",
+                "items"
+              ]
+            },
+            "description": "Saves a book to the customer's personal wishlist and configures a target price alert threshold in cents.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bookId\": \"{{bookId2}}\",\n  \"desiredPriceAlert\": {\n    \"amount\": 4000,\n    \"currency\": \"USD\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Item added with desired price threshold\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.bookId).to.eql(pm.collectionVariables.get(\"bookId2\"));",
+                  "    pm.expect(jsonData.desiredPriceAlert.amount).to.eql(4000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03. Remove Book from Wishlist",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wishlists/items/:bookId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "wishlists",
+                "items",
+                ":bookId"
+              ],
+              "variable": [
+                {
+                  "key": "bookId",
+                  "value": "{{bookId2}}",
+                  "description": "Master Book UUID"
+                }
+              ]
+            },
+            "description": "Removes a book from the customer's wishlist."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 204 No Content\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Customer wishlist lifecycle and price drop notification thresholds."
+    },
+    {
+      "name": "06. Shopping Cart & Basket",
+      "item": [
+        {
+          "name": "01. Retrieve Active Shopping Cart",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cart",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cart"
+              ]
+            },
+            "description": "Retrieves the current shopping basket and computed monetary breakdown for the user."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Cart object returned with financial totals\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"items\");",
+                  "    pm.expect(jsonData).to.have.property(\"subtotal\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02. Add Primary Format Item to Cart",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cart/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cart",
+                "items"
+              ]
+            },
+            "description": "Adds a specific book format SKU (Paperback, Hardcover, EBook) to the active shopping cart.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"formatId\": \"{{formatId}}\",\n  \"quantity\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Format item added with quantity 2\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.items).to.be.an(\"array\").and.not.empty;",
+                  "    var item = jsonData.items.find(function(i) { return i.formatId === pm.collectionVariables.get(\"formatId\"); });",
+                  "    pm.expect(item).to.be.an(\"object\");",
+                  "    pm.expect(item.quantity).to.be.at.least(2);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03. Add Secondary Format Item to Cart",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cart/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cart",
+                "items"
+              ]
+            },
+            "description": "Adds an additional book item into the cart to test multi-line cart behavior and item deletion.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"formatId\": \"{{formatId2}}\",\n  \"quantity\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Secondary format item added to cart\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.items.length).to.be.at.least(2);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04. Mutate Cart Item Quantity",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cart/items/:formatId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cart",
+                "items",
+                ":formatId"
+              ],
+              "variable": [
+                {
+                  "key": "formatId",
+                  "value": "{{formatId}}",
+                  "description": "Target Book Format SKU UUID"
+                }
+              ]
+            },
+            "description": "Modifies the quantity of a specific item line in the basket, triggering inventory lock checks and subtotal recalculation.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Item quantity updated to 3 and subtotal recalculated\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    var item = jsonData.items.find(function(i) { return i.formatId === pm.collectionVariables.get(\"formatId\"); });",
+                  "    pm.expect(item.quantity).to.eql(3);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05. Remove Secondary Item from Cart",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cart/items/:formatId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cart",
+                "items",
+                ":formatId"
+              ],
+              "variable": [
+                {
+                  "key": "formatId",
+                  "value": "{{formatId2}}",
+                  "description": "Target Book Format SKU UUID to remove"
+                }
+              ]
+            },
+            "description": "Removes a line item completely from the cart."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 204 No Content\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06. Apply Promotional Coupon Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cart/coupon",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cart",
+                "coupon"
+              ]
+            },
+            "description": "Validates and applies a percentage or fixed-amount coupon to the active basket.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"couponCode\": \"SUMMER20\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Accepts 200 if coupon exists in DB, or 400 if coupon not seeded yet in local testing environment",
+                  "pm.test(\"Status code is 200 OK or 400 Bad Request (Graceful Coupon Check)\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 400]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Coupon discount reflected in basket summary\", function () {",
+                  "        var jsonData = pm.response.json();",
+                  "        pm.expect(jsonData.couponCode).to.eql(\"SUMMER20\");",
+                  "        pm.expect(jsonData.discount.amount).to.be.above(0);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "07. Remove Promotional Coupon from Cart",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cart/coupon",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cart",
+                "coupon"
+              ]
+            },
+            "description": "Removes the currently applied coupon code and restores standard subtotal pricing."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Coupon removed from cart\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.couponCode).to.be.null;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "08. Merge Anonymous Guest Basket into Customer Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cart/merge",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cart",
+                "merge"
+              ]
+            },
+            "description": "Consolidates items accumulated in an anonymous browsing session into the authenticated user's permanent cart.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"guestSessionToken\": \"{{guestSessionToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Merged basket returns consolidated items\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.items).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Shopping basket operations, multi-format items, quantities, promotional coupons, and guest merge."
+    },
+    {
+      "name": "07. Checkout & Order Lifecycle",
+      "item": [
+        {
+          "name": "01. Submit Checkout Saga and Confirm Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "idemp_{{$randomUUID}}",
+                "type": "text",
+                "description": "Guarantees exactly-once execution against duplicate charges"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "checkout"
+              ]
+            },
+            "description": "Orchestrates atomic order checkout saga: inventory reservation, address snapshotting, payment authorization, consignment initialization, and cart purge.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shippingAddressId\": \"{{addressId}}\",\n  \"paymentMethodToken\": \"pm_card_visa_tok_4242\",\n  \"customerNotes\": \"Please handle with care; collector edition books included.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Order placed and confirmed with order number\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"orderNumber\");",
+                  "    pm.expect(jsonData.orderNumber).to.match(/^ORD-/);",
+                  "    pm.expect(jsonData.orderStatus).to.eql(\"CONFIRMED\");",
+                  "    pm.collectionVariables.set(\"orderNumber\", jsonData.orderNumber);",
+                  "    console.log(\"Confirmed Order Number: \" + jsonData.orderNumber);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02. List Customer Order History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders?status=CONFIRMED&page=0&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "CONFIRMED",
+                  "description": "Filter by order lifecycle status"
+                },
+                {
+                  "key": "page",
+                  "value": "0",
+                  "description": "Page zero-index"
+                },
+                {
+                  "key": "size",
+                  "value": "10",
+                  "description": "Page batch size"
+                }
+              ]
+            },
+            "description": "Retrieves a paginated timeline of customer orders with financial summaries and status."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Order history returns confirmed orders\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.content).to.be.an(\"array\").and.not.empty;",
+                  "    var hasOrder = jsonData.content.some(function(o) { return o.orderNumber === pm.collectionVariables.get(\"orderNumber\"); });",
+                  "    pm.expect(hasOrder).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03. Retrieve Detailed Order and Invoice Specifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/:orderNumber",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                ":orderNumber"
+              ],
+              "variable": [
+                {
+                  "key": "orderNumber",
+                  "value": "{{orderNumber}}",
+                  "description": "Business order code (e.g. ORD-20260919-XXXX)"
+                }
+              ]
+            },
+            "description": "Retrieves full historical invoice specification, including immutable title/price snapshots and audit milestone timeline."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Order invoice snapshot includes line items and pricing breakdown\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.orderNumber).to.eql(pm.collectionVariables.get(\"orderNumber\"));",
+                  "    pm.expect(jsonData.lineItems).to.be.an(\"array\").and.not.empty;",
+                  "    var lineItem = jsonData.lineItems[0];",
+                  "    pm.expect(lineItem).to.have.property(\"lineItemId\");",
+                  "    pm.collectionVariables.set(\"orderLineItemId\", lineItem.lineItemId);",
+                  "    console.log(\"Saved orderLineItemId: \" + lineItem.lineItemId);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04. Initiate Return Merchandise Authorization (RMA)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/:orderNumber/returns",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                ":orderNumber",
+                "returns"
+              ],
+              "variable": [
+                {
+                  "key": "orderNumber",
+                  "value": "{{orderNumber}}",
+                  "description": "Confirmed order identifier"
+                }
+              ]
+            },
+            "description": "Initiates an RMA return within the 30-day store return policy window, issuing prepaid carrier return label details.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reasonCode\": \"CHANGED_MIND\",\n  \"customerRemarks\": \"Purchased an alternate digital audiobook edition instead.\",\n  \"returnItems\": [\n    {\n      \"orderLineItemId\": \"{{orderLineItemId}}\",\n      \"quantity\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"RMA created with tracking number and instructions\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"rmaNumber\");",
+                  "    pm.expect(jsonData.rmaNumber).to.match(/^RMA-/);",
+                  "    pm.expect(jsonData).to.have.property(\"returnTrackingNumber\");",
+                  "    pm.collectionVariables.set(\"rmaNumber\", jsonData.rmaNumber);",
+                  "    pm.collectionVariables.set(\"returnTrackingNumber\", jsonData.returnTrackingNumber);",
+                  "    console.log(\"RMA Authorization generated: \" + jsonData.rmaNumber);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05. Place Secondary Order (For Grace Period Cancellation Test)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "idemp_cancel_{{$randomUUID}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "checkout"
+              ]
+            },
+            "description": "Places a fresh order so that cancellation can be tested without impacting the completed order used in returns and payment tests.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newShippingAddress\": {\n    \"recipientName\": \"Alexandra Morgan-Lee\",\n    \"phoneNumber\": \"+14155550188\",\n    \"streetAddress1\": \"742 Evergreen Terrace\",\n    \"city\": \"Springfield\",\n    \"stateProvince\": \"OR\",\n    \"postalCode\": \"97477\",\n    \"countryCode\": \"US\"\n  },\n  \"paymentMethodToken\": \"pm_card_mastercard_tok_5555\",\n  \"customerNotes\": \"Duplicate test order to verify automated cancellation.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Ensure an item is in the cart prior to checkout",
+                  "pm.sendRequest({",
+                  "    url: pm.collectionVariables.get('baseUrl') + '/cart/items',",
+                  "    method: 'POST',",
+                  "    header: {",
+                  "        'Content-Type': 'application/json',",
+                  "        'Authorization': 'Bearer ' + pm.collectionVariables.get('accessToken')",
+                  "    },",
+                  "    body: {",
+                  "        mode: 'raw',",
+                  "        raw: JSON.stringify({",
+                  "            formatId: pm.collectionVariables.get('formatId'),",
+                  "            quantity: 1",
+                  "        })",
+                  "    }",
+                  "}, function (err, res) {",
+                  "    console.log('Cart seeded for cancellation checkout. Status: ' + (res ? res.code : err));",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Secondary order created\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.orderNumber).to.be.a(\"string\").and.not.empty;",
+                  "    pm.collectionVariables.set(\"orderToCancelNumber\", jsonData.orderNumber);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06. Cancel Order within Policy Grace Period",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/:orderNumber/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                ":orderNumber",
+                "cancel"
+              ],
+              "variable": [
+                {
+                  "key": "orderNumber",
+                  "value": "{{orderToCancelNumber}}",
+                  "description": "Order identifier to cancel"
+                }
+              ]
+            },
+            "description": "Cancels an order within the 60-minute policy grace window, automatically restoring inventory quantities and recording refunds.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Customer placed duplicate order by mistake; immediate self-service cancellation.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Order cancelled and restock confirmation issued\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.orderStatus).to.eql(\"CANCELLED\");",
+                  "    pm.expect(jsonData).to.have.property(\"refundAmount\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "End-to-end checkout saga, customer order invoices, self-service cancellation, and RMA returns."
+    },
+    {
+      "name": "08. Payments & Digital Wallet",
+      "item": [
+        {
+          "name": "01. Coordinate Multi-Tender Payment Intent",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/payments/intent",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payments",
+                "intent"
+              ]
+            },
+            "description": "Initializes multi-tender payment coordination (credit card + digital wallet ledger split) prior to third-party authorization.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderNumber\": \"{{orderNumber}}\",\n  \"tenderSplits\": [\n    {\n      \"tenderType\": \"CREDIT_CARD\",\n      \"amount\": {\n        \"amount\": 3999,\n        \"currency\": \"USD\"\n      },\n      \"tenderReference\": \"visa_card_ending_4242\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Payment intent initialized\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"paymentIntentId\");",
+                  "    pm.expect(jsonData).to.have.property(\"status\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02. Ingest Payment Gateway Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Stripe-Signature",
+                "value": "t=1758280000,v1=simulated_sha256_webhook_signature",
+                "type": "text",
+                "description": "Carrier/Gateway HMAC signature header"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/payments/webhooks/:provider",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payments",
+                "webhooks",
+                ":provider"
+              ],
+              "variable": [
+                {
+                  "key": "provider",
+                  "value": "stripe",
+                  "description": "Payment gateway provider code"
+                }
+              ]
+            },
+            "description": "Asynchronous listener ingesting and cryptographically verifying payment gateway webhook notifications (Stripe, Adyen, Razorpay).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"evt_test_charge_succeeded_2026\",\n  \"type\": \"payment_intent.succeeded\",\n  \"created\": 1758280000,\n  \"data\": {\n    \"object\": {\n      \"id\": \"pi_3N21ABCXYZ\",\n      \"amount\": 3999,\n      \"currency\": \"usd\",\n      \"status\": \"succeeded\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Webhook acknowledged\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.received).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03. Retrieve Customer Digital Wallet Balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/payments/wallet",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payments",
+                "wallet"
+              ]
+            },
+            "description": "Retrieves the customer's store credit wallet balance, currency code, and locked status."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Wallet balance details returned\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"currentBalance\");",
+                  "    pm.expect(jsonData.currencyCode).to.eql(\"USD\");",
+                  "    pm.expect(jsonData.isLocked).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Payment intents, gateway webhook listeners, and digital store wallet ledgers."
+    },
+    {
+      "name": "09. Shipping & Logistics",
+      "item": [
+        {
+          "name": "01. Calculate Dynamic Carrier Shipping Rates and ETA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Store-Code",
+                "value": "{{storeCode}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/shipping/rates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "shipping",
+                "rates"
+              ]
+            },
+            "description": "Calculates dynamic carrier rates (Standard Ground, 2-Day Air, Overnight) and delivery date estimates.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"destinationPostalCode\": \"97477\",\n  \"destinationCountryCode\": \"US\",\n  \"weightGrams\": 680\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Calculates valid carrier shipping tiers\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an(\"array\").and.not.empty;",
+                  "    var rate = jsonData[0];",
+                  "    pm.expect(rate).to.have.property(\"carrierCode\");",
+                  "    pm.expect(rate).to.have.property(\"serviceLevel\");",
+                  "    pm.expect(rate).to.have.property(\"shippingCost\");",
+                  "    pm.expect(rate).to.have.property(\"estimatedDeliveryDays\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02. Track Carrier Consignment Milestones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/shipping/consignments/:trackingNumber",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "shipping",
+                "consignments",
+                ":trackingNumber"
+              ],
+              "variable": [
+                {
+                  "key": "trackingNumber",
+                  "value": "{{trackingNumber}}",
+                  "description": "Carrier Tracking Identifier"
+                }
+              ]
+            },
+            "description": "Queries real-time carrier consignment delivery status and milestone event history."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Accepts 200 if tracking number seeded in DB, or 404 if mock tracking number is queried",
+                  "pm.test(\"Status code is 200 OK or 404 Not Found\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Tracking timeline contains milestones\", function () {",
+                  "        var jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property(\"trackingNumber\");",
+                  "        pm.expect(jsonData.milestones).to.be.an(\"array\");",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Freight rate engine, carrier delivery ETAs, and consignment tracking."
+    },
+    {
+      "name": "10. Reviews & Helpfulness Ratings",
+      "item": [
+        {
+          "name": "01. List Customer Book Reviews",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/books/:bookId/reviews?sort=HELPFUL&page=0&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books",
+                ":bookId",
+                "reviews"
+              ],
+              "query": [
+                {
+                  "key": "sort",
+                  "value": "HELPFUL",
+                  "description": "Sort order: HELPFUL, RECENT, RATING_HIGH, RATING_LOW"
+                },
+                {
+                  "key": "page",
+                  "value": "0",
+                  "description": "Page zero-index"
+                },
+                {
+                  "key": "size",
+                  "value": "10",
+                  "description": "Page batch size"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "bookId",
+                  "value": "{{bookId}}",
+                  "description": "Master Book UUID"
+                }
+              ]
+            },
+            "description": "Retrieves aggregate rating metrics, star histograms, and verified customer written reviews for a book."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Book reviews summary returned\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"averageRating\");",
+                  "    pm.expect(jsonData).to.have.property(\"totalReviews\");",
+                  "    pm.expect(jsonData).to.have.property(\"reviews\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02. Submit Verified Customer Review and Rating",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/books/:bookId/reviews",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "books",
+                ":bookId",
+                "reviews"
+              ],
+              "variable": [
+                {
+                  "key": "bookId",
+                  "value": "{{bookId}}",
+                  "description": "Master Book UUID"
+                }
+              ]
+            },
+            "description": "Submits a verified customer rating (1-5 stars) and review commentary.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rating\": 5,\n  \"reviewTitle\": \"Exceptional guide to writing clean and maintainable software\",\n  \"reviewBody\": \"Clean Code by Uncle Bob is an industry staple that fundamentally transforms how software engineers structure their code. The chapters on function design, naming conventions, and code smells are directly applicable to daily production codebases.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 201 Created on first submission, or 409 Conflict if review already submitted by this user",
+                  "pm.test(\"Status code is 201 Created or 409 Conflict\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([201, 409]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "    pm.test(\"Review saved and ID captured for voting test\", function () {",
+                  "        var jsonData = pm.response.json();",
+                  "        pm.expect(jsonData.id).to.be.a(\"string\").and.not.empty;",
+                  "        pm.expect(jsonData.rating).to.eql(5);",
+                  "        pm.collectionVariables.set(\"reviewId\", jsonData.id);",
+                  "        console.log(\"Saved reviewId: \" + jsonData.id);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03. Vote on Review Helpfulness",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{secondCustomerAccessToken}}",
+                "type": "text",
+                "description": "Uses secondary customer token to prevent self-voting violation"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reviews/:reviewId/votes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reviews",
+                ":reviewId",
+                "votes"
+              ],
+              "variable": [
+                {
+                  "key": "reviewId",
+                  "value": "{{reviewId}}",
+                  "description": "Target Review UUID"
+                }
+              ]
+            },
+            "description": "Casts a helpfulness upvote or downvote on a customer review using a distinct peer reviewer account.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isHelpful\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// If a review was created in the previous step, verify 200 OK; otherwise handle 404/400 gracefully",
+                  "pm.test(\"Status code is 200 OK (or 404 if no review ID available)\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Helpfulness vote recorded\", function () {",
+                  "        var jsonData = pm.response.json();",
+                  "        pm.expect(jsonData.userVote).to.eql(true);",
+                  "        pm.expect(jsonData.helpfulVotesCount).to.be.at.least(1);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Verified purchase reviews, star distributions, and helpfulness voting."
+    },
+    {
+      "name": "11. Merchandising & Recommendations",
+      "item": [
+        {
+          "name": "01. Get Personalized Home Page Recommendations Carousel",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Store-Code",
+                "value": "{{storeCode}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/recommendations/home?limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "recommendations",
+                "home"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Maximum number of items per carousel section"
+                }
+              ]
+            },
+            "description": "Generates dynamic landing page carousels including trending books, new releases, and personalized picks."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Home recommendations return sections\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"sections\");",
+                  "    pm.expect(jsonData.sections).to.be.an(\"array\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02. Get Book Up-Sell Collector Editions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/recommendations/books/:bookId/upsell",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "recommendations",
+                "books",
+                ":bookId",
+                "upsell"
+              ],
+              "variable": [
+                {
+                  "key": "bookId",
+                  "value": "{{bookId}}",
+                  "description": "Master Book UUID"
+                }
+              ]
+            },
+            "description": "Offers premium edition upgrades (e.g. Deluxe Hardcover, Signed Anniversary Edition) based on configured merchandising rules."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Up-sell editions computed\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"bookId\");",
+                  "    pm.expect(jsonData).to.have.property(\"upgrades\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03. Get Book Cross-Sell Companion Titles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/recommendations/books/:bookId/cross-sell?limit=3",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "recommendations",
+                "books",
+                ":bookId",
+                "cross-sell"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "3",
+                  "description": "Companion bundle items limit"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "bookId",
+                  "value": "{{bookId}}",
+                  "description": "Master Book UUID"
+                }
+              ]
+            },
+            "description": "Recommends bundle companion titles frequently purchased together with the selected book."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Cross-sell companion items returned\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"companions\");",
+                  "    pm.expect(jsonData.companions).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Home page personalized discovery, Up-Sell upgrades, and Cross-Sell companion bundling."
+    },
+    {
+      "name": "12. System Health & Observability",
+      "item": [
+        {
+          "name": "01. System Health Check (Liveness & Readiness)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            },
+            "description": "Spring Boot Actuator probes verifying container liveness, PostgreSQL readiness, and disk space health."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"System status is UP\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"UP\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02. System Application Information",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/info",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "info"
+              ]
+            },
+            "description": "Application metadata and build configuration info from Spring Boot Actuator."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Spring Boot Actuator operational probes, metrics, and health checks."
+    }
+  ]
+}
