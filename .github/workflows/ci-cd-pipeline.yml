@@ -135,6 +135,7 @@ jobs:
           restore-keys: ${{ runner.os }}-sonar
 
       - name: Execute SonarCloud Quality Analysis
+        if: ${{ secrets.SONAR_TOKEN != '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -143,10 +144,15 @@ jobs:
           mvn sonar:sonar \
             -B \
             -Dsonar.host.url="${SONAR_HOST_URL}" \
-            -Dsonar.projectKey="${{ secrets.SONAR_PROJECT_KEY || 'book-corner' }}" \
-            -Dsonar.organization="${{ secrets.SONAR_ORGANIZATION || 'book-corner' }}" \
+            -Dsonar.projectKey="${{ secrets.SONAR_PROJECT_KEY || 'omkarsingh73_book-corner' }}" \
+            -Dsonar.organization="${{ secrets.SONAR_ORGANIZATION || 'omkarsingh73' }}" \
             -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
             -Dsonar.qualitygate.wait=true
+
+      - name: SonarCloud Secret Notice
+        if: ${{ secrets.SONAR_TOKEN == '' }}
+        run: |
+          echo "::warning title=SonarCloud Skipped::SONAR_TOKEN secret is not configured in GitHub repository secrets. Sonar analysis was skipped. To enable, configure SONAR_TOKEN, SONAR_ORGANIZATION, and SONAR_PROJECT_KEY in GitHub Secrets."
 
   # ===========================================================================
   # 3. DOCKER BUILD & PUSH TO AMAZON ECR
