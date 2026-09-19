@@ -42,7 +42,7 @@ public class MerchandisingRuleEntity extends BaseAuditEntity {
     @Column(name = "rule_type", nullable = false, length = 32)
     private String ruleType;
 
-    @Column(name = "priority", nullable = false)
+    @Column(name = "priority_score", nullable = false)
     @Builder.Default
     private int priority = 1;
 

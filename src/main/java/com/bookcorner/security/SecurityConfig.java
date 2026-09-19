@@ -4,10 +4,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.AuthenticationProvider;
+import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -52,10 +52,9 @@ public class SecurityConfig {
     }
 
     /**
-     * Standard DAO authentication provider linking CustomUserDetailsService and BCryptPasswordEncoder.
+     * Helper to create DAO authentication provider linking CustomUserDetailsService and BCryptPasswordEncoder.
      */
-    @Bean
-    public AuthenticationProvider authenticationProvider() {
+    private DaoAuthenticationProvider daoAuthenticationProvider() {
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
         authProvider.setUserDetailsService(userDetailsService);
         authProvider.setPasswordEncoder(passwordEncoder());
@@ -63,11 +62,23 @@ public class SecurityConfig {
     }
 
     /**
-     * Exposes the AuthenticationManager bean for programmatic authentication.
+     * Exposes the AuthenticationManager bean for programmatic authentication using ProviderManager.
      */
     @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
-        return config.getAuthenticationManager();
+    public AuthenticationManager authenticationManager() {
+        return new ProviderManager(daoAuthenticationProvider());
+    }
+
+    /**
+     * Disables automatic servlet container registration of the JwtFilter component.
+     * This prevents JwtFilter from executing twice (once in Tomcat container and once in Spring Security)
+     * and avoids premature servlet filter initialization during embedded Tomcat startup.
+     */
+    @Bean
+    public FilterRegistrationBean<JwtFilter> jwtFilterRegistration(JwtFilter filter) {
+        FilterRegistrationBean<JwtFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     /**
@@ -92,7 +103,7 @@ public class SecurityConfig {
             )
 
             // 5. Wire DAO authentication provider
-            .authenticationProvider(authenticationProvider())
+            .authenticationProvider(daoAuthenticationProvider())
 
             // 6. Prepend JWT bearer filter before UsernamePasswordAuthenticationFilter
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)

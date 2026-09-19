@@ -1,6 +1,10 @@
 spring:
   application:
     name: book-corner
+  data:
+    redis:
+      repositories:
+        enabled: false
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/bookcorner}
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
@@ -51,6 +55,8 @@ management:
       enabled: true
     readinessstate:
       enabled: true
+    redis:
+      enabled: false
   tracing:
     sampling:
       probability: 1.0
