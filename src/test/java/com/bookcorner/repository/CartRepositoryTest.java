@@ -63,6 +63,7 @@ class CartRepositoryTest extends AbstractPostgresRepositoryTest {
 
         guestSession = guestSessionRepository.save(GuestSessionEntity.builder()
                 .sessionToken("gst_test_session_token_12345")
+                .storeId(store.getId())
                 .expiresAt(Instant.now().plus(30, ChronoUnit.DAYS))
                 .build());
     }

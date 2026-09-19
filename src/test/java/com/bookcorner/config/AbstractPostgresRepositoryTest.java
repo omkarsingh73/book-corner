@@ -22,12 +22,30 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Import(JpaAuditingConfig.class)
 public abstract class AbstractPostgresRepositoryTest {
 
-    @Container
     protected static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
             .withDatabaseName("bookcorner_test")
             .withUsername("test")
             .withPassword("test")
+            .withInitScript("init-schemas.sql")
             .withReuse(true);
+
+    static {
+        postgres.start();
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(
+                postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+             java.sql.Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";");
+            stmt.execute("CREATE SCHEMA IF NOT EXISTS member;");
+            stmt.execute("CREATE SCHEMA IF NOT EXISTS catalog;");
+            stmt.execute("CREATE SCHEMA IF NOT EXISTS ordering;");
+            stmt.execute("CREATE SCHEMA IF NOT EXISTS payment;");
+            stmt.execute("CREATE SCHEMA IF NOT EXISTS shipping;");
+            stmt.execute("CREATE SCHEMA IF NOT EXISTS store;");
+            stmt.execute("CREATE SCHEMA IF NOT EXISTS review;");
+        } catch (java.sql.SQLException e) {
+            throw new RuntimeException("Failed to initialize test postgres database schemas", e);
+        }
+    }
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {

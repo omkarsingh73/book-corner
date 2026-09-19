@@ -189,7 +189,7 @@ public class AuthService {
 
         GuestSessionEntity session = GuestSessionEntity.builder()
                 .sessionToken(token)
-                .storeId(storeId)
+                .storeId(storeId != null ? storeId : UUID.fromString("00000000-0000-0000-0000-000000000001"))
                 .ipAddress(ipAddress)
                 .userAgent(userAgent)
                 .expiresAt(expiresAt)

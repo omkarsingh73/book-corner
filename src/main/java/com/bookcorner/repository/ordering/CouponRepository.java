@@ -38,7 +38,7 @@ public interface CouponRepository extends JpaRepository<CouponEntity, UUID> {
     /**
      * Atomically increment the redemption count of a coupon upon order checkout completion.
      */
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
         UPDATE CouponEntity c 
         SET c.currentRedemptions = c.currentRedemptions + 1,

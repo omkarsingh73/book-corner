@@ -35,6 +35,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -85,14 +86,14 @@ class FullApiIntegrationTest extends AbstractIntegrationTest {
             store = storeRepository.findByStoreCode("BK_ONLINE_IT").get();
         }
 
-        if (publisherRepository.findAll().isEmpty()) {
+        if (publisherRepository.findByPublisherCode("PUB-IT-01").isEmpty()) {
             publisher = publisherRepository.save(PublisherEntity.builder()
                     .publisherCode("PUB-IT-01")
                     .publisherName("Addison-Wesley Professional")
                     .contactEmail("contact@aw.com")
                     .build());
         } else {
-            publisher = publisherRepository.findAll().get(0);
+            publisher = publisherRepository.findByPublisherCode("PUB-IT-01").get();
         }
 
         if (categoryRepository.findBySlug("software-engineering").isEmpty()) {
@@ -105,14 +106,14 @@ class FullApiIntegrationTest extends AbstractIntegrationTest {
             category = categoryRepository.findBySlug("software-engineering").get();
         }
 
-        if (authorRepository.findAll().isEmpty()) {
+        if (authorRepository.findByAuthorSlug("martin-fowler-it").isEmpty()) {
             author = authorRepository.save(AuthorEntity.builder()
                     .fullName("Martin Fowler")
                     .authorSlug("martin-fowler-it")
                     .biography("Author and speaker on software architecture")
                     .build());
         } else {
-            author = authorRepository.findAll().get(0);
+            author = authorRepository.findByAuthorSlug("martin-fowler-it").get();
         }
 
         if (bookRepository.findByIsbn13("9780134757599").isEmpty()) {
@@ -141,10 +142,10 @@ class FullApiIntegrationTest extends AbstractIntegrationTest {
             book.addFormat(format);
 
             book = bookRepository.save(book);
-            format = book.getFormats().get(0);
+            format = bookFormatRepository.findBySku("SKU-REFACTOR-PB").orElseThrow();
         } else {
             book = bookRepository.findByIsbn13("9780134757599").get();
-            format = book.getFormats().get(0);
+            format = bookFormatRepository.findBySku("SKU-REFACTOR-PB").orElseThrow();
         }
     }
 
@@ -226,7 +227,7 @@ class FullApiIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/categories")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].slug").value("software-engineering"));
+                .andExpect(jsonPath("$[*].slug").value(hasItem("software-engineering")));
 
         // 2. Browse Books with filters
         mockMvc.perform(get("/books")
@@ -235,8 +236,8 @@ class FullApiIntegrationTest extends AbstractIntegrationTest {
                         .param("maxPrice", "6000")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].isbn13").value("9780134757599"))
-                .andExpect(jsonPath("$.content[0].title").value(containsString("Refactoring")));
+                .andExpect(jsonPath("$.content[*].isbn13").value(hasItem("9780134757599")))
+                .andExpect(jsonPath("$.content[*].title").value(hasItem(containsString("Refactoring"))));
 
         // 3. Get Book Details by ID
         mockMvc.perform(get("/books/{bookId}", book.getId())
@@ -330,7 +331,7 @@ class FullApiIntegrationTest extends AbstractIntegrationTest {
                         .header("Authorization", "Bearer " + customerTokens.getAccessToken())
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items[0].format.sku").value("SKU-REFACTOR-PB"))
+                .andExpect(jsonPath("$.items[0].sku").value("SKU-REFACTOR-PB"))
                 .andReturn();
 
         CartResponse cart = objectMapper.readValue(cartResult.getResponse().getContentAsString(), CartResponse.class);

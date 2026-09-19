@@ -41,6 +41,7 @@ public interface PaymentMapper {
     @Mapping(target = "walletId", source = "id")
     @Mapping(target = "currentBalance", source = "entity", qualifiedByName = "mapWalletBalance")
     @Mapping(target = "recentEntries", source = "ledgerEntries")
+    @Mapping(target = "isLocked", source = "locked")
     CustomerWalletResponse toCustomerWalletResponse(CustomerWalletEntity entity);
 
     @Mapping(target = "amount", source = "entity", qualifiedByName = "mapLedgerAmount")

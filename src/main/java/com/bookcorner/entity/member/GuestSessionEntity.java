@@ -33,7 +33,7 @@ public class GuestSessionEntity extends BaseAuditEntity {
     @Column(name = "session_token", nullable = false, length = 128, unique = true)
     private String sessionToken;
 
-    @Column(name = "store_id", nullable = false)
+    @Column(name = "store_id")
     private UUID storeId;
 
     @Column(name = "ip_address", length = 45)

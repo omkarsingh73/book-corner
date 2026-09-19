@@ -46,7 +46,7 @@ public interface UserRepository extends JpaRepository<UserEntity, UUID> {
     /**
      * Record successful login timestamp and reset failed attempts counter.
      */
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
         UPDATE UserEntity u 
         SET u.lastLoginAt = :loginTime, 
@@ -59,7 +59,7 @@ public interface UserRepository extends JpaRepository<UserEntity, UUID> {
     /**
      * Increment failed login attempts counter.
      */
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
         UPDATE UserEntity u 
         SET u.failedLoginAttempts = u.failedLoginAttempts + 1,

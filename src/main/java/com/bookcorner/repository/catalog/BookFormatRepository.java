@@ -45,7 +45,7 @@ public interface BookFormatRepository extends JpaRepository<BookFormatEntity, UU
      * Atomic stock decrement query preventing negative inventory balances.
      * Returns 1 if stock was decremented, 0 if insufficient stock.
      */
-    @Modifying
+    @Modifying(flushAutomatically = true)
     @Query("""
         UPDATE BookFormatEntity bf 
         SET bf.stockQuantity = bf.stockQuantity - :quantity,
@@ -58,7 +58,7 @@ public interface BookFormatRepository extends JpaRepository<BookFormatEntity, UU
     /**
      * Restock inventory on order cancellation or RMA return.
      */
-    @Modifying
+    @Modifying(flushAutomatically = true)
     @Query("""
         UPDATE BookFormatEntity bf 
         SET bf.stockQuantity = bf.stockQuantity + :quantity,

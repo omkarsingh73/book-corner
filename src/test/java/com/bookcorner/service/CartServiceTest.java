@@ -36,6 +36,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -121,6 +122,14 @@ class CartServiceTest {
                 .expiresAt(Instant.now().plus(7, ChronoUnit.DAYS))
                 .items(new ArrayList<>())
                 .build();
+
+        lenient().when(cartMapper.toCartResponse(any())).thenAnswer(invocation -> {
+            CartEntity c = invocation.getArgument(0);
+            return CartResponse.builder()
+                    .cartId(c.getId())
+                    .items(new ArrayList<>())
+                    .build();
+        });
     }
 
     @Test
@@ -153,7 +162,6 @@ class CartServiceTest {
                 .build();
 
         when(bookFormatRepository.findById(formatId)).thenReturn(Optional.of(format));
-        when(cartRepository.findByUserId(userId)).thenReturn(Optional.of(cart));
 
         assertThatThrownBy(() -> cartService.addItemToCart(userId, null, null, request))
                 .isInstanceOf(InsufficientStockException.class)
@@ -176,7 +184,6 @@ class CartServiceTest {
                 .build();
 
         when(cartRepository.findByUserId(userId)).thenReturn(Optional.of(cart));
-        when(bookFormatRepository.findById(formatId)).thenReturn(Optional.of(format));
         when(cartRepository.save(any(CartEntity.class))).thenReturn(cart);
 
         CartResponse response = cartService.updateItemQuantity(userId, null, formatId, request);

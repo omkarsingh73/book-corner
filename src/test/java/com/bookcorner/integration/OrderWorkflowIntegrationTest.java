@@ -256,7 +256,7 @@ class OrderWorkflowIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(addItemReq)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items[0].format.id").value(format.getId().toString()))
+                .andExpect(jsonPath("$.items[0].formatId").value(format.getId().toString()))
                 .andExpect(jsonPath("$.items[0].quantity").value(2))
                 .andExpect(jsonPath("$.subtotal.amount").value(9000)); // $45.00 * 2 = $90.00
 
@@ -272,7 +272,7 @@ class OrderWorkflowIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(couponReq)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.appliedCoupon.couponCode").value("SAGA20"))
+                .andExpect(jsonPath("$.couponCode").value("SAGA20"))
                 .andExpect(jsonPath("$.discount.amount").value(1800)); // 20% of 9000 = 1800 ($18.00)
 
         // =========================================================================
@@ -284,7 +284,7 @@ class OrderWorkflowIntegrationTest extends AbstractIntegrationTest {
                 .city("London")
                 .stateOrProvince("Greater London")
                 .postalCode("SW1A 2AA")
-                .countryCode("GBR")
+                .countryCode("GB")
                 .phoneNumber("+442079460919")
                 .build();
 
@@ -305,7 +305,7 @@ class OrderWorkflowIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.orderNumber").isNotEmpty())
                 .andExpect(jsonPath("$.orderStatus").value("CONFIRMED"))
-                .andExpect(jsonPath("$.total.amount").isNotEmpty())
+                .andExpect(jsonPath("$.totalAmount.amount").isNotEmpty())
                 .andReturn();
 
         OrderConfirmationResponse confirmation = objectMapper.readValue(
@@ -360,7 +360,7 @@ class OrderWorkflowIntegrationTest extends AbstractIntegrationTest {
         List<ShippingConsignmentEntity> consignments = shippingConsignmentRepository.findByOrderId(orderInDb.getId());
         assertThat(consignments).hasSize(1);
         assertThat(consignments.get(0).getCarrierCode()).isEqualTo("FEDEX");
-        assertThat(consignments.get(0).getConsignmentStatus()).isEqualTo("LABEL_CREATED");
+        assertThat(consignments.get(0).getConsignmentStatus()).isEqualTo("MANIFEST_CREATED");
 
         // =========================================================================
         // STEP 5: Query Order Details & Enforce Security Isolation

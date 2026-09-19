@@ -46,15 +46,14 @@ public class BookSpecification {
                 predicates.add(criteriaBuilder.equal(bookAuthors.get("author").get("authorSlug"), authorSlug));
             }
 
-            // 3. Filter by format type (PAPERBACK, HARDCOVER, EBOOK, AUDIOBOOK)
-            if (formatType != null && !formatType.isBlank()) {
+            // 3 & 4. Filter by format type and price range
+            boolean hasFormatType = formatType != null && !formatType.isBlank();
+            boolean hasPrice = minPrice != null || maxPrice != null;
+            if (hasFormatType || hasPrice) {
                 Join<BookEntity, BookFormatEntity> formats = root.join("formats", JoinType.INNER);
-                predicates.add(criteriaBuilder.equal(formats.get("formatType"), formatType));
-            }
-
-            // 4. Filter by price range
-            if (minPrice != null || maxPrice != null) {
-                Join<BookEntity, BookFormatEntity> formats = root.join("formats", JoinType.INNER);
+                if (hasFormatType) {
+                    predicates.add(criteriaBuilder.equal(formats.get("formatType"), formatType));
+                }
                 if (minPrice != null) {
                     predicates.add(criteriaBuilder.greaterThanOrEqualTo(formats.get("basePriceAmount"), minPrice));
                 }

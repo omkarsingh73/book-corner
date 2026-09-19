@@ -47,7 +47,7 @@ public interface CartRepository extends JpaRepository<CartEntity, UUID> {
     /**
      * Delete expired carts during scheduled maintenance cleanup.
      */
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("DELETE FROM CartEntity c WHERE c.expiresAt < :cutoff")
     int deleteExpiredCarts(@Param("cutoff") Instant cutoff);
 }

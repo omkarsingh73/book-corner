@@ -32,6 +32,12 @@ class SecurityIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     private JwtProvider jwtProvider;
 
+    @Autowired
+    private com.bookcorner.repository.member.GuestSessionRepository guestSessionRepository;
+
+    @Autowired
+    private com.bookcorner.repository.store.StoreRepository storeRepository;
+
     private UserEntity customerUser;
     private UserEntity adminUser;
     private String customerJwt;
@@ -150,6 +156,19 @@ class SecurityIntegrationTest extends AbstractIntegrationTest {
     @DisplayName("Security 5: Anonymous Guest Session token grants access to /cart but denied for /orders")
     void shouldEnforceGuestSessionBoundaries() throws Exception {
         String guestToken = "gst_security_test_token";
+
+        com.bookcorner.entity.store.StoreEntity store = storeRepository.findAll().stream().findFirst()
+                .orElseGet(() -> storeRepository.save(com.bookcorner.entity.store.StoreEntity.builder()
+                        .storeCode("BK_MAIN_ONLINE")
+                        .storeName("Book Corner Online")
+                        .defaultCurrency("USD")
+                        .build()));
+
+        guestSessionRepository.save(com.bookcorner.entity.member.GuestSessionEntity.builder()
+                .sessionToken(guestToken)
+                .storeId(store.getId())
+                .expiresAt(java.time.Instant.now().plus(30, java.time.temporal.ChronoUnit.DAYS))
+                .build());
 
         // Guest token allows access to cart
         mockMvc.perform(get("/cart")

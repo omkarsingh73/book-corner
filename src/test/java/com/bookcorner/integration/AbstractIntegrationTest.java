@@ -29,11 +29,11 @@ import java.util.UUID;
 @Testcontainers
 public abstract class AbstractIntegrationTest {
 
-    @Container
     protected static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
             .withDatabaseName("bookcorner_it")
             .withUsername("test")
             .withPassword("test")
+            .withInitScript("init-schemas.sql")
             .withReuse(true);
 
     @Autowired
@@ -45,10 +45,21 @@ public abstract class AbstractIntegrationTest {
     @Autowired
     protected JwtProvider jwtProvider;
 
-    @BeforeAll
-    static void startContainer() {
-        if (!postgres.isRunning()) {
-            postgres.start();
+    static {
+        postgres.start();
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(
+                postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+             java.sql.Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";");
+            stmt.execute("CREATE SCHEMA IF NOT EXISTS member;");
+            stmt.execute("CREATE SCHEMA IF NOT EXISTS catalog;");
+            stmt.execute("CREATE SCHEMA IF NOT EXISTS ordering;");
+            stmt.execute("CREATE SCHEMA IF NOT EXISTS payment;");
+            stmt.execute("CREATE SCHEMA IF NOT EXISTS shipping;");
+            stmt.execute("CREATE SCHEMA IF NOT EXISTS store;");
+            stmt.execute("CREATE SCHEMA IF NOT EXISTS review;");
+        } catch (java.sql.SQLException e) {
+            throw new RuntimeException("Failed to initialize test postgres database schemas", e);
         }
     }
 

@@ -78,11 +78,12 @@ class OrderControllerTest {
     void shouldCheckoutOrderSuccessfully() throws Exception {
         AddressDto shipping = AddressDto.builder()
                 .recipientName("John Watson")
+                .phoneNumber("+442079460919")
                 .streetLine1("221B Baker St")
                 .city("London")
                 .stateOrProvince("Greater London")
                 .postalCode("NW1 6XE")
-                .countryCode("GBR")
+                .countryCode("GB")
                 .build();
 
         CheckoutOrderRequest request = CheckoutOrderRequest.builder()

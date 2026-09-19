@@ -35,7 +35,8 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
     Optional<PaymentTransactionEntity> findByIdWithSplits(@Param("id") UUID id);
 
     /**
-     * Find all transactions for a specific order.
+     * Find all transactions for a specific order with tender splits eagerly loaded.
      */
+    @EntityGraph(attributePaths = {"tenderSplits"})
     List<PaymentTransactionEntity> findByOrderId(UUID orderId);
 }
