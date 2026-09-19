@@ -188,17 +188,27 @@ jobs:
           fi
           echo "env_tag=${ENV_TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Check Deployable Branch
+      - name: Check Deployable Branch & AWS Configuration
         id: check
+        env:
+          AWS_OIDC_ROLE_ARN: ${{ secrets.AWS_OIDC_ROLE_ARN }}
         run: |
+          IS_DEPLOYABLE_BRANCH=false
           if [ "${{ github.ref }}" = "refs/heads/main" ] || [ "${{ github.ref }}" = "refs/heads/develop" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            IS_DEPLOYABLE_BRANCH=true
+          fi
+
+          if [ "$IS_DEPLOYABLE_BRANCH" = "true" ] && [ -n "$AWS_OIDC_ROLE_ARN" ]; then
             echo "deployable=true" >> "$GITHUB_OUTPUT"
           else
             echo "deployable=false" >> "$GITHUB_OUTPUT"
+            if [ "$IS_DEPLOYABLE_BRANCH" = "true" ] && [ -z "$AWS_OIDC_ROLE_ARN" ]; then
+              echo "::warning title=AWS Deployment Skipped::AWS_OIDC_ROLE_ARN secret is not set in GitHub repository secrets. ECR push and App Runner deployment are skipped; Docker image is built locally for verification."
+            fi
           fi
 
-      # Build image locally for feature branches (validates Dockerfile integrity)
-      - name: Build Docker Image (Verification Only for Feature Branches)
+      # Build image locally when deployable is false (validates Dockerfile integrity without requiring AWS credentials)
+      - name: Build Docker Image (Local Verification)
         if: steps.check.outputs.deployable == 'false'
         uses: docker/build-push-action@v5
         with:
